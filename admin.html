@@ -84,6 +84,16 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
 .pickup-info{background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12.5px;color:var(--brown-text);line-height:1.7;}
 .pickup-info b{color:var(--wood);}
 .student-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-left:8px;}
+.search-filter-bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+.search-input{flex:2;min-width:200px;border:1.5px solid var(--border);border-radius:12px;padding:11px 16px;font-family:var(--font-body);font-size:13px;background:white;color:var(--brown-text);outline:none;}
+.search-input:focus{border-color:var(--gold);}
+.status-filter{flex:1;min-width:140px;border:1.5px solid var(--border);border-radius:12px;padding:11px 12px;font-family:var(--font-body);font-size:13px;background:white;color:var(--brown-text);outline:none;cursor:pointer;}
+.date-group-header{display:flex;align-items:center;gap:10px;margin:24px 0 14px;padding:10px 16px;border-radius:12px;font-family:var(--font-display);font-weight:700;font-size:15px;}
+.date-group-header.today{background:linear-gradient(135deg,var(--wood),var(--gold-dark));color:white;}
+.date-group-header.tomorrow{background:rgba(201,168,76,.2);color:var(--wood);border:1.5px solid var(--gold);}
+.date-group-header.later{background:var(--cream-dark);color:var(--wood-light);border:1px solid var(--border);}
+.date-group-header.noinfo{background:#F5F5F5;color:#999;border:1px dashed #CCC;}
+.date-group-count{margin-left:auto;font-size:12px;font-weight:600;opacity:.85;}
 .student-yes{background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9;}
 .student-no{background:#F3E5F5;color:#6A1B9A;border:1px solid #CE93D8;}
 
@@ -144,9 +154,21 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
 
     <div class="toolbar">
       <h2>Riwayat Pesanan</h2>
-      <button class="btn-refresh" id="refreshBtn" onclick="loadOrders()">Refresh</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-refresh" id="exportBtn" onclick="exportToExcel()" style="background:var(--wood);">Export Excel</button>
+        <button class="btn-refresh" id="refreshBtn" onclick="loadOrders()">Refresh</button>
+      </div>
     </div>
 
+    <div class="search-filter-bar">
+      <input type="text" id="searchInput" class="search-input" placeholder="Cari nama, kode, atau nomor WA..." oninput="applyFilters()"/>
+      <select id="statusFilter" class="status-filter" onchange="applyFilters()">
+        <option value="all">Semua Status</option>
+        <option value="pending">Baru</option>
+        <option value="confirmed">Dikonfirmasi</option>
+        <option value="completed">Selesai</option>
+      </select>
+    </div>
     <div id="ordersList"></div>
   </div>
 </div>
@@ -163,6 +185,7 @@ var SUPABASE_URL = 'https://sixwcjbhqydufapxftip.supabase.co';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpeHdjamJocXlkdWZhcHhmdGlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ5MDMsImV4cCI6MjA5OTAyMDkwM30.zBNVRIKoypww2mDLeVJXZPbfheNPJ2VFV_Rs44jfChQ';
 var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 var currentOrders = [];
+var filteredOrders = [];
 
 function rp(n){ return 'Rp' + Number(n).toLocaleString('id-ID'); }
 
@@ -244,6 +267,74 @@ sb.auth.getSession().then(function(res){
 });
 
 // ============ ORDERS ============
+function exportToExcel(){
+  if(currentOrders.length === 0){ showToast('Tidak ada data untuk di-export'); return; }
+
+  var headers = ['Kode Pesanan','Nama Customer','No WhatsApp','Status','Mahasiswa Gundar','Pick Up Lokasi','Alamat','Waktu Pick Up','Items','Subtotal','Diskon','Total','Catatan','Waktu Order'];
+  var rows = [headers];
+
+  for(var i=0;i<currentOrders.length;i++){
+    var o = currentOrders[i];
+    var itemsText = '';
+    if(Array.isArray(o.items)){
+      for(var j=0;j<o.items.length;j++){
+        var it = o.items[j];
+        itemsText += it.name;
+        if(it.coating) itemsText += ' (Coating: '+it.coating+')';
+        if(it.filling) itemsText += ' (Filling: '+it.filling+')';
+        if(j < o.items.length-1) itemsText += ' | ';
+      }
+    }
+    var studentText = o.is_student === true ? 'Ya' : (o.is_student === false ? 'Tidak' : '');
+    var pickupTimeText = '';
+    if(o.pickup_datetime){
+      try { pickupTimeText = new Date(o.pickup_datetime).toLocaleString('id-ID'); } catch(e){ pickupTimeText = o.pickup_datetime; }
+    }
+    var orderTimeText = '';
+    try { orderTimeText = new Date(o.created_at).toLocaleString('id-ID'); } catch(e){ orderTimeText = o.created_at; }
+
+    rows.push([
+      o.customer_code || '',
+      o.customer_name || '',
+      o.customer_phone || '',
+      o.status || 'pending',
+      studentText,
+      o.pickup_campus || '',
+      o.pickup_location || '',
+      pickupTimeText,
+      itemsText,
+      o.subtotal || 0,
+      o.discount || 0,
+      o.total || 0,
+      o.note || '',
+      orderTimeText
+    ]);
+  }
+
+  var csvContent = rows.map(function(row){
+    return row.map(function(cell){
+      var s = String(cell);
+      if(s.indexOf(',') > -1 || s.indexOf('"') > -1 || s.indexOf('\n') > -1){
+        s = '"' + s.replace(/"/g,'""') + '"';
+      }
+      return s;
+    }).join(',');
+  }).join('\n');
+
+  var blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  var dateStr = new Date().toISOString().slice(0,10);
+  link.href = url;
+  link.download = 'Milora_Orders_' + dateStr + '.csv';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  showToast('File berhasil di-export!');
+}
+
 function loadOrders(){
   var btn = document.getElementById('refreshBtn');
   btn.disabled = true;
@@ -258,8 +349,23 @@ function loadOrders(){
     }
     currentOrders = res.data || [];
     renderStats();
-    renderOrders();
+    applyFilters();
   });
+}
+
+function applyFilters(){
+  var searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+  var statusVal = document.getElementById('statusFilter').value;
+
+  filteredOrders = currentOrders.filter(function(o){
+    var matchesStatus = (statusVal === 'all') || ((o.status || 'pending') === statusVal);
+    if(!matchesStatus) return false;
+    if(!searchTerm) return true;
+    var haystack = ((o.customer_name||'') + ' ' + (o.customer_code||'') + ' ' + (o.customer_phone||'')).toLowerCase();
+    return haystack.indexOf(searchTerm) > -1;
+  });
+
+  renderOrders();
 }
 
 function renderStats(){
@@ -276,100 +382,180 @@ function renderStats(){
   document.getElementById('stItems').textContent = totalItems;
 }
 
+function dateKeyOf(dtStr){
+  if(!dtStr) return null;
+  try {
+    var d = new Date(dtStr);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  } catch(e){ return null; }
+}
+
+function renderOrderCard(o){
+  var status = o.status || 'pending';
+  var statusLabel = status === 'pending' ? 'Baru' : (status === 'confirmed' ? 'Dikonfirmasi' : 'Selesai');
+  var statusCls = 'status-' + status;
+
+  var itemsHtml = '';
+  if(Array.isArray(o.items)){
+    for(var j=0;j<o.items.length;j++){
+      var it = o.items[j];
+      itemsHtml += (j+1) + '. ' + it.name;
+      var extras = [];
+      if(it.coating){
+        var ct = it.coating;
+        if(it.coatingPrice) ct += ' +' + rp(it.coatingPrice);
+        extras.push(ct);
+      }
+      if(it.filling){
+        var ft = it.filling;
+        if(it.fillingPrice) ft += ' +' + rp(it.fillingPrice);
+        extras.push(ft);
+      }
+      if(extras.length > 0){
+        itemsHtml += ' <span class="oi-sauce">(' + extras.join(', ') + ')</span>';
+      }
+      itemsHtml += '<br>';
+    }
+  }
+
+  var timeStr = '';
+  try { timeStr = new Date(o.created_at).toLocaleString('id-ID'); } catch(e){ timeStr = o.created_at; }
+
+  var proofHtml = o.proof_url
+    ? '<img class="order-proof" src="' + o.proof_url + '" onclick="openLightbox(\'' + o.proof_url + '\')" alt="Bukti"/>'
+    : '<div class="order-proof-missing">Tidak ada bukti</div>';
+
+  var h = '';
+  h += '<div class="order-card">';
+  h += '<div class="order-top">';
+  var waLink = formatWaLink(o.customer_phone);
+  var studentBadge = '';
+  if(o.is_student === true) studentBadge = '<span class="student-badge student-yes">Mahasiswa Gundar</span>';
+  else if(o.is_student === false) studentBadge = '<span class="student-badge student-no">Non-Mahasiswa</span>';
+  h += '<div><span class="order-code">' + o.customer_code + '</span>' + studentBadge + '<div class="order-cust">' + o.customer_name + '</div>';
+  if(o.customer_phone) h += '<div class="order-phone">' + o.customer_phone + '</div>';
+  h += '<div class="order-time">' + timeStr + '</div></div>';
+  h += '<span class="status-badge ' + statusCls + '">' + statusLabel + '</span>';
+  h += '</div>';
+  h += '<div class="order-body">';
+  h += '<div><div class="order-items">' + itemsHtml + '</div>';
+  if(o.pickup_campus || o.pickup_location || o.pickup_datetime){
+    var pickupTimeStr = '';
+    if(o.pickup_datetime){
+      try {
+        var dt = new Date(o.pickup_datetime);
+        pickupTimeStr = dt.toLocaleString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'});
+      } catch(e){ pickupTimeStr = o.pickup_datetime; }
+    }
+    h += '<div class="pickup-info">';
+    if(o.pickup_campus) h += '<b>Pick Up:</b> ' + o.pickup_campus + '<br>';
+    if(o.pickup_location) h += '<b>Alamat:</b> ' + o.pickup_location + '<br>';
+    if(pickupTimeStr) h += '<b>Waktu:</b> ' + pickupTimeStr;
+    h += '</div>';
+  }
+  if(o.note) h += '<div class="order-note">Catatan: ' + o.note + '</div>';
+  h += '<div class="order-total-line">Total: ' + rp(o.total);
+  if(o.discount > 0) h += ' <span style="font-size:11px;color:#2E7D32;font-weight:500;">(Diskon ' + rp(o.discount) + ')</span>';
+  h += '</div></div>';
+  h += proofHtml;
+  h += '</div>';
+  h += '<div class="order-actions">';
+  h += '<button class="btn-status' + (status==='pending'?' active':'') + '" onclick="setStatus(' + o.id + ',\'pending\')">Baru</button>';
+  h += '<button class="btn-status' + (status==='confirmed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'confirmed\')">Dikonfirmasi</button>';
+  h += '<button class="btn-status' + (status==='completed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'completed\')">Selesai</button>';
+  if(waLink) h += '<a class="btn-chat-wa" href="' + waLink + '" target="_blank">Chat WhatsApp</a>';
+  h += '</div>';
+  h += '</div>';
+  return h;
+}
+
 function renderOrders(){
   var el = document.getElementById('ordersList');
-  if(currentOrders.length === 0){
-    el.innerHTML = '<div class="empty-state"><div class="ei">&#128203;</div><p>Belum ada pesanan masuk</p></div>';
+  if(filteredOrders.length === 0){
+    el.innerHTML = '<div class="empty-state"><div class="ei">&#128203;</div><p>Tidak ada pesanan yang cocok</p></div>';
     return;
   }
-  var h = '';
-  for(var i=0;i<currentOrders.length;i++){
-    var o = currentOrders[i];
-    var status = o.status || 'pending';
-    var statusLabel = status === 'pending' ? 'Baru' : (status === 'confirmed' ? 'Dikonfirmasi' : 'Selesai');
-    var statusCls = 'status-' + status;
 
-    var itemsHtml = '';
-    if(Array.isArray(o.items)){
-      for(var j=0;j<o.items.length;j++){
-        var it = o.items[j];
-        itemsHtml += (j+1) + '. ' + it.name;
-        var extras = [];
-        if(it.coating){
-          var ct = it.coating;
-          if(it.coatingPrice) ct += ' +' + rp(it.coatingPrice);
-          extras.push(ct);
-        }
-        if(it.filling){
-          var ft = it.filling;
-          if(it.fillingPrice) ft += ' +' + rp(it.fillingPrice);
-          extras.push(ft);
-        }
-        if(extras.length > 0){
-          itemsHtml += ' <span class="oi-sauce">(' + extras.join(', ') + ')</span>';
-        }
-        itemsHtml += '<br>';
-      }
-    }
+  var today = new Date();
+  var todayKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  var tmr = new Date(today.getTime() + 86400000);
+  var tomorrowKey = tmr.getFullYear() + '-' + String(tmr.getMonth()+1).padStart(2,'0') + '-' + String(tmr.getDate()).padStart(2,'0');
 
-    var timeStr = '';
-    try { timeStr = new Date(o.created_at).toLocaleString('id-ID'); } catch(e){ timeStr = o.created_at; }
+  var groups = {};
+  var noDateGroup = [];
 
-    var proofHtml = o.proof_url
-      ? '<img class="order-proof" src="' + o.proof_url + '" onclick="openLightbox(\'' + o.proof_url + '\')" alt="Bukti"/>'
-      : '<div class="order-proof-missing">Tidak ada bukti</div>';
-
-    h += '<div class="order-card">';
-    h += '<div class="order-top">';
-    var waLink = formatWaLink(o.customer_phone);
-    var studentBadge = '';
-    if(o.is_student === true) studentBadge = '<span class="student-badge student-yes">Mahasiswa Gundar</span>';
-    else if(o.is_student === false) studentBadge = '<span class="student-badge student-no">Non-Mahasiswa</span>';
-    h += '<div><span class="order-code">' + o.customer_code + '</span>' + studentBadge + '<div class="order-cust">' + o.customer_name + '</div>';
-    if(o.customer_phone) h += '<div class="order-phone">' + o.customer_phone + '</div>';
-    h += '<div class="order-time">' + timeStr + '</div></div>';
-    h += '<span class="status-badge ' + statusCls + '">' + statusLabel + '</span>';
-    h += '</div>';
-    h += '<div class="order-body">';
-    h += '<div><div class="order-items">' + itemsHtml + '</div>';
-    if(o.pickup_campus || o.pickup_location || o.pickup_datetime){
-      var pickupTimeStr = '';
-      if(o.pickup_datetime){
-        try {
-          var dt = new Date(o.pickup_datetime);
-          pickupTimeStr = dt.toLocaleString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'});
-        } catch(e){ pickupTimeStr = o.pickup_datetime; }
-      }
-      h += '<div class="pickup-info">';
-      if(o.pickup_campus) h += '<b>Pick Up:</b> ' + o.pickup_campus + '<br>';
-      if(o.pickup_location) h += '<b>Alamat:</b> ' + o.pickup_location + '<br>';
-      if(pickupTimeStr) h += '<b>Waktu:</b> ' + pickupTimeStr;
-      h += '</div>';
-    }
-    if(o.note) h += '<div class="order-note">Catatan: ' + o.note + '</div>';
-    h += '<div class="order-total-line">Total: ' + rp(o.total);
-    if(o.discount > 0) h += ' <span style="font-size:11px;color:#2E7D32;font-weight:500;">(Diskon ' + rp(o.discount) + ')</span>';
-    h += '</div></div>';
-    h += proofHtml;
-    h += '</div>';
-    h += '<div class="order-actions">';
-    h += '<button class="btn-status' + (status==='pending'?' active':'') + '" onclick="setStatus(' + o.id + ',\'pending\')">Baru</button>';
-    h += '<button class="btn-status' + (status==='confirmed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'confirmed\')">Dikonfirmasi</button>';
-    h += '<button class="btn-status' + (status==='completed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'completed\')">Selesai</button>';
-    if(waLink) h += '<a class="btn-chat-wa" href="' + waLink + '" target="_blank">Chat WhatsApp</a>';
-    h += '</div>';
-    h += '</div>';
+  for(var i=0;i<filteredOrders.length;i++){
+    var o = filteredOrders[i];
+    var key = dateKeyOf(o.pickup_datetime);
+    if(!key){ noDateGroup.push(o); continue; }
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(o);
   }
+
+  var sortedKeys = Object.keys(groups).sort();
+
+  var h = '';
+  for(var k=0;k<sortedKeys.length;k++){
+    var key = sortedKeys[k];
+    var groupOrders = groups[key];
+    var cls = 'later';
+    var label = '';
+    var dParts = key.split('-');
+    var dObj = new Date(parseInt(dParts[0]), parseInt(dParts[1])-1, parseInt(dParts[2]));
+    var formattedDate = dObj.toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+    if(key === todayKey){ cls = 'today'; label = 'Hari Ini &mdash; ' + formattedDate; }
+    else if(key === tomorrowKey){ cls = 'tomorrow'; label = 'Besok &mdash; ' + formattedDate; }
+    else { label = formattedDate; }
+
+    h += '<div class="date-group-header ' + cls + '">' + label + '<span class="date-group-count">' + groupOrders.length + ' pesanan</span></div>';
+    for(var m=0;m<groupOrders.length;m++){
+      h += renderOrderCard(groupOrders[m]);
+    }
+  }
+
+  if(noDateGroup.length > 0){
+    h += '<div class="date-group-header noinfo">Tanpa Info Pick Up<span class="date-group-count">' + noDateGroup.length + ' pesanan</span></div>';
+    for(var n=0;n<noDateGroup.length;n++){
+      h += renderOrderCard(noDateGroup[n]);
+    }
+  }
+
   el.innerHTML = h;
 }
 
+function statusNotifMessage(o, newStatus){
+  var name = o.customer_name || 'Kak';
+  var code = o.customer_code || '';
+  if(newStatus === 'confirmed'){
+    return 'Halo ' + name + '! \n\nPesanan kamu dengan kode *' + code + '* sudah kami *KONFIRMASI* \u2705\n\nPesanan sedang kami siapkan. Terima kasih sudah order di MeltyGo by Milora!';
+  }
+  if(newStatus === 'completed'){
+    return 'Halo ' + name + '! \n\nPesanan kamu dengan kode *' + code + '* sudah *SELESAI* \u2705\n\nSilakan diambil sesuai jadwal pick up yang kamu pilih ya. Terima kasih sudah order di MeltyGo by Milora! \ud83d\ude4f';
+  }
+  return null;
+}
+
 function setStatus(orderId, newStatus){
+  var order = null;
+  for(var i=0;i<currentOrders.length;i++) if(currentOrders[i].id === orderId) order = currentOrders[i];
+
   sb.from('orders').update({ status: newStatus }).eq('id', orderId).then(function(res){
     if(res.error){
       showToast('Gagal update status');
       return;
     }
     showToast('Status diperbarui');
+
+    if(order){
+      var msg = statusNotifMessage(order, newStatus);
+      var waLink = formatWaLink(order.customer_phone);
+      if(msg && waLink){
+        var fullLink = waLink + '?text=' + encodeURIComponent(msg);
+        window.open(fullLink, '_blank');
+      }
+    }
+
     loadOrders();
   });
 }
