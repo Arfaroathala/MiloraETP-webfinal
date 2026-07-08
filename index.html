@@ -228,6 +228,7 @@ nav.scrolled{box-shadow:0 4px 24px var(--shadow);}
 .pstep-label{font-size:10px;color:var(--wood-light);margin-top:6px;font-weight:500;text-align:center;}
 .pstep.active .pstep-label{color:var(--gold-dark);font-weight:600;}
 .spanel{display:none;padding:24px 28px 28px;}
+.pay-steps.hidden{display:none;}
 .spanel.active{display:block;}
 .pay-title{font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--brown-text);margin-bottom:6px;}
 .pay-sub{font-size:13px;color:var(--wood-light);margin-bottom:20px;}
@@ -568,6 +569,7 @@ footer{background:var(--brown-text);color:rgba(255,255,255,.6);padding:56px 0 32
       <div class="sum-list" id="sumList"></div>
       <div class="total-box"><span class="tb-label">Total Pembayaran</span><span class="tb-amt" id="totalDisp">Rp0</span></div>
       <div class="inp-group"><label>NAMA PEMESAN *</label><input type="text" id="custName" placeholder="Masukkan nama kamu..."/></div>
+      <div class="inp-group"><label>NOMOR WHATSAPP *</label><input type="tel" id="custPhone" placeholder="Contoh: 08123456789"/></div>
       <div class="inp-group"><label>CATATAN (opsional)</label><textarea id="custNote" placeholder="Ada permintaan khusus?"></textarea></div>
       <div class="pay-nav">
         <button class="btn-back" onclick="closePay()">Batal</button>
@@ -596,7 +598,7 @@ footer{background:var(--brown-text);color:rgba(255,255,255,.6);padding:56px 0 32
     <div class="spanel" id="sp3">
       <div class="pay-title">Upload Bukti Pembayaran</div>
       <div class="pay-sub">Upload screenshot bukti transfer kamu</div>
-      <div class="code-remind"><div><div style="font-size:11px;color:var(--wood-light);font-weight:500;margin-bottom:2px;">KODE UNIKMU</div><div class="cr-code" id="codeRemind">--</div></div><div class="cr-text">Catat kode ini! Admin akan mengkonfirmasi via WhatsApp menggunakan kode ini.</div></div>
+      <div class="code-remind"><div><div style="font-size:11px;color:var(--wood-light);font-weight:500;margin-bottom:2px;">KODE UNIKMU</div><div class="cr-code" id="codeRemind">--</div></div><div class="cr-text">Catat kode ini! Admin akan menghubungi WhatsApp kamu untuk konfirmasi menggunakan kode ini.</div></div>
       <div class="upload-preview" id="upPreview"><img id="prevImg" src="" alt="Bukti"/><button class="remove-img" onclick="rmProof()">&#10005;</button></div>
       <div class="upload-area" id="upArea">
         <input type="file" id="proofFile" accept="image/*" onchange="handleUpload(event)"/>
@@ -604,8 +606,20 @@ footer{background:var(--brown-text);color:rgba(255,255,255,.6);padding:56px 0 32
         <div class="upload-text">Tap untuk upload bukti transfer</div>
         <div class="upload-sub">Format: JPG, PNG, WEBP (maks. 5MB)</div>
       </div>
-      <button class="btn-wa" id="btnWa" onclick="sendWA()" disabled>Kirim Konfirmasi ke WhatsApp</button>
-      <p style="font-size:11px;color:var(--wood-light);text-align:center;margin-top:10px;line-height:1.6;">* Lampirkan foto bukti transfer secara manual setelah chat WhatsApp terbuka.</p>
+      <button class="btn-next" id="btnWa" onclick="submitOrder()" disabled style="width:100%;">Kirim Pesanan</button>
+      <p style="font-size:11px;color:var(--wood-light);text-align:center;margin-top:10px;line-height:1.6;">Setelah pesanan terkirim, admin kami akan menghubungi WhatsApp kamu untuk konfirmasi lebih lanjut.</p>
+    </div>
+    <div class="spanel" id="sp4">
+      <div style="text-align:center;padding:20px 0;">
+        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#4CAF50,#2E7D32);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px;color:white;">&#10003;</div>
+        <div class="pay-title" style="margin-bottom:10px;">Pesanan Berhasil Dikirim!</div>
+        <p style="font-size:13.5px;color:var(--wood-light);line-height:1.7;margin-bottom:20px;">Terima kasih! Admin kami akan menghubungi kamu via WhatsApp ke nomor <strong id="successPhone" style="color:var(--brown-text);"></strong> untuk konfirmasi pesanan.</p>
+        <div class="code-remind" style="text-align:left;">
+          <div><div style="font-size:11px;color:var(--wood-light);font-weight:500;margin-bottom:2px;">KODE PESANANMU</div><div class="cr-code" id="successCode">--</div></div>
+          <div class="cr-text">Simpan kode ini untuk referensi kalau admin menanyakannya.</div>
+        </div>
+        <button class="btn-next" onclick="closePay()" style="width:100%;margin-top:20px;">Tutup</button>
+      </div>
     </div>
   </div>
 </div>
@@ -799,6 +813,9 @@ function openPay(){
   if(cart.length===0) return;
   custCode = genCode();
   proofData = null;
+  document.querySelector('.pay-steps').classList.remove('hidden');
+  document.getElementById('sp4').classList.remove('active');
+  document.getElementById('custPhone').value = '';
   renderS1();
   goStep(1);
   toggleCart();
@@ -814,7 +831,9 @@ function closePay(){
 function goStep(n){
   if(n===2){
     var nm = document.getElementById('custName').value.trim();
+    var ph = document.getElementById('custPhone').value.trim();
     if(!nm){ showToast('Masukkan nama pemesan dulu!','err'); return; }
+    if(!ph || ph.replace(/[^0-9]/g,'').length < 9){ showToast('Masukkan nomor WhatsApp yang valid!','err'); return; }
   }
   for(var i=1;i<=3;i++){
     var ind = document.getElementById('pi'+i);
@@ -888,66 +907,54 @@ function rmProof(){
   document.getElementById('proofFile').value='';
 }
 
-function sendWA(){
+function submitOrder(){
   var name = document.getElementById('custName').value.trim();
+  var phone = document.getElementById('custPhone').value.trim();
   var note = document.getElementById('custNote').value.trim();
   var sub=0; for(var i=0;i<cart.length;i++) sub+=cart[i].total;
   var disc=getDisc(sub); var total=Math.max(0,sub-disc);
-  var lines='';
   var itemsForDb=[];
   for(var i=0;i<cart.length;i++){
     var it=cart[i];
-    lines += (i+1)+'. '+it.name+' - '+rp(it.price);
-    if(it.sauce&&it.sauce.id!=='none') lines+=' (+ '+it.sauce.name+')';
-    lines+='\n';
     itemsForDb.push({name:it.name, sauce:(it.sauce&&it.sauce.id!=='none')?it.sauce.name:null, price:it.price});
   }
-  var msg='Halo Milora Enterprise!\n\n';
-  msg+='*KONFIRMASI PEMBAYARAN*\n';
-  msg+='==================\n';
-  msg+='Nama: '+name+'\n';
-  msg+='Kode Unik: *'+custCode+'*\n';
-  msg+='==================\n';
-  msg+='Detail Pesanan:\n'+lines;
-  if(disc>0) msg+='Diskon ('+voucher.label+'): -'+rp(disc)+'\n';
-  msg+='==================\n';
-  msg+='Total Dibayar: *'+rp(total)+'*\n';
-  msg+='==================\n';
-  if(note) msg+='Catatan: '+note+'\n\n';
-  msg+='Bukti transfer sudah saya lampirkan. Mohon konfirmasi pesanan saya ya!';
 
   var btn = document.getElementById('btnWa');
   btn.disabled = true;
-  btn.textContent = 'Menyimpan order...';
+  btn.textContent = 'Mengirim pesanan...';
 
-  uploadProofAndSave(itemsForDb, name, note, sub, disc, total)
+  uploadProofAndSave(itemsForDb, name, phone, note, sub, disc, total)
     .then(function(){
-      window.open('https://wa.me/6289516891178?text='+encodeURIComponent(msg),'_blank');
-      showToast('Order tersimpan! Lampirkan foto bukti di WhatsApp ya.','info');
-      setTimeout(function(){
-        cart=[]; voucher=null;
-        document.getElementById('voucherInput').value='';
-        document.getElementById('voucherResult').className='voucher-result';
-        updCart(); closePay();
-        showToast('Pesanan berhasil dikirim! Terima kasih','ok');
-      },2000);
+      document.getElementById('successCode').textContent = custCode;
+      document.getElementById('successPhone').textContent = phone;
+      document.querySelector('.pay-steps').classList.add('hidden');
+      document.querySelectorAll('.spanel').forEach(function(p){p.classList.remove('active');});
+      document.getElementById('sp4').classList.add('active');
+      cart=[]; voucher=null;
+      document.getElementById('voucherInput').value='';
+      document.getElementById('voucherResult').className='voucher-result';
+      updCart();
     })
     .catch(function(err){
       console.error(err);
-      showToast('Gagal menyimpan order. Coba lagi ya.','err');
+      var msg = (err && err.message) ? err.message : 'Gagal mengirim order. Coba lagi ya.';
+      showToast(msg,'err');
       btn.disabled = false;
-      btn.textContent = 'Kirim Konfirmasi ke WhatsApp';
+      btn.textContent = 'Kirim Pesanan';
     });
 }
-
-function uploadProofAndSave(itemsForDb, name, note, sub, disc, total){
+function uploadProofAndSave(itemsForDb, name, phone, note, sub, disc, total){
   var proofUrlHolder = { url: null };
   var uploadStep;
   if(proofData){
     var ext = (proofData.name && proofData.name.indexOf('.')>-1) ? proofData.name.split('.').pop() : 'jpg';
     var path = custCode + '_' + Date.now() + '.' + ext;
     uploadStep = sb.storage.from('payment-proofs').upload(path, proofData).then(function(res){
-      if(res.error) throw res.error;
+      if(res.error){
+        var e = new Error('Gagal upload foto bukti: ' + res.error.message);
+        e.stage = 'upload';
+        throw e;
+      }
       var pub = sb.storage.from('payment-proofs').getPublicUrl(path);
       proofUrlHolder.url = pub.data.publicUrl;
     });
@@ -958,6 +965,7 @@ function uploadProofAndSave(itemsForDb, name, note, sub, disc, total){
     var row = {
       customer_code: custCode,
       customer_name: name,
+      customer_phone: phone,
       items: itemsForDb,
       subtotal: sub,
       discount: disc,
@@ -967,7 +975,11 @@ function uploadProofAndSave(itemsForDb, name, note, sub, disc, total){
       status: 'pending'
     };
     return sb.from('orders').insert([row]).then(function(res){
-      if(res.error) throw res.error;
+      if(res.error){
+        var e = new Error('Gagal menyimpan data order: ' + res.error.message);
+        e.stage = 'insert';
+        throw e;
+      }
     });
   });
 }
