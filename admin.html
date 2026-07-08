@@ -78,6 +78,9 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
 .btn-status{border:1.5px solid var(--border);background:white;color:var(--wood);padding:7px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;}
 .btn-status:hover{background:var(--cream-dark);}
 .btn-status.active{background:var(--gold-dark);color:white;border-color:var(--gold-dark);}
+.order-phone{font-size:12px;color:var(--wood-light);margin-top:2px;}
+.btn-chat-wa{background:linear-gradient(135deg,#25D366,#128C7E);color:white;border:none;padding:7px 16px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;}
+.btn-chat-wa:hover{opacity:.9;}
 
 .empty-state{text-align:center;padding:60px 20px;color:var(--wood-light);}
 .empty-state .ei{font-size:48px;margin-bottom:12px;}
@@ -157,6 +160,14 @@ var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 var currentOrders = [];
 
 function rp(n){ return 'Rp' + Number(n).toLocaleString('id-ID'); }
+
+function formatWaLink(phone){
+  if(!phone) return null;
+  var digits = phone.replace(/[^0-9]/g,'');
+  if(digits.charAt(0) === '0') digits = '62' + digits.substring(1);
+  else if(digits.substring(0,2) !== '62') digits = '62' + digits;
+  return 'https://wa.me/' + digits;
+}
 
 function showToast(msg){
   var t = document.getElementById('toast');
@@ -292,7 +303,10 @@ function renderOrders(){
 
     h += '<div class="order-card">';
     h += '<div class="order-top">';
-    h += '<div><span class="order-code">' + o.customer_code + '</span><div class="order-cust">' + o.customer_name + '</div><div class="order-time">' + timeStr + '</div></div>';
+    var waLink = formatWaLink(o.customer_phone);
+    h += '<div><span class="order-code">' + o.customer_code + '</span><div class="order-cust">' + o.customer_name + '</div>';
+    if(o.customer_phone) h += '<div class="order-phone">' + o.customer_phone + '</div>';
+    h += '<div class="order-time">' + timeStr + '</div></div>';
     h += '<span class="status-badge ' + statusCls + '">' + statusLabel + '</span>';
     h += '</div>';
     h += '<div class="order-body">';
@@ -307,6 +321,7 @@ function renderOrders(){
     h += '<button class="btn-status' + (status==='pending'?' active':'') + '" onclick="setStatus(' + o.id + ',\'pending\')">Baru</button>';
     h += '<button class="btn-status' + (status==='confirmed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'confirmed\')">Dikonfirmasi</button>';
     h += '<button class="btn-status' + (status==='completed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'completed\')">Selesai</button>';
+    if(waLink) h += '<a class="btn-chat-wa" href="' + waLink + '" target="_blank">Chat WhatsApp</a>';
     h += '</div>';
     h += '</div>';
   }
