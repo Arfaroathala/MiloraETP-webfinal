@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --cream:#FAF6EE;--cream-dark:#F2EAD8;--gold:#C9A84C;
@@ -311,28 +312,28 @@ function exportToExcel(){
     ]);
   }
 
-  var csvContent = rows.map(function(row){
-    return row.map(function(cell){
-      var s = String(cell);
-      if(s.indexOf(',') > -1 || s.indexOf('"') > -1 || s.indexOf('\n') > -1){
-        s = '"' + s.replace(/"/g,'""') + '"';
-      }
-      return s;
-    }).join(',');
-  }).join('\n');
+  var ws = XLSX.utils.aoa_to_sheet(rows);
 
-  var blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  var url = URL.createObjectURL(blob);
-  var link = document.createElement('a');
+  // Force "No WhatsApp" column (index 2) to be treated as TEXT, prevents scientific notation
+  for(var r=1;r<rows.length;r++){
+    var cellRef = XLSX.utils.encode_cell({r:r, c:2});
+    if(ws[cellRef]) ws[cellRef].t = 's';
+  }
+
+  // Set sensible column widths (in characters)
+  ws['!cols'] = [
+    {wch:12}, {wch:20}, {wch:15}, {wch:12}, {wch:14},
+    {wch:12}, {wch:35}, {wch:22}, {wch:40}, {wch:10},
+    {wch:10}, {wch:10}, {wch:25}, {wch:20}
+  ];
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+
   var dateStr = new Date().toISOString().slice(0,10);
-  link.href = url;
-  link.download = 'Milora_Orders_' + dateStr + '.csv';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  XLSX.writeFile(wb, 'Milora_Orders_' + dateStr + '.xlsx');
 
-  showToast('File berhasil di-export!');
+  showToast('File Excel berhasil di-export!');
 }
 
 function loadOrders(){
