@@ -1388,30 +1388,27 @@ function uploadProofAndSave(itemsForDb, name, phone, note, sub, disc, total, isS
     uploadStep = Promise.resolve();
   }
   return uploadStep.then(function(){
-    var row = {
-      customer_code: custCode,
-      customer_name: name,
-      customer_phone: phone,
-      items: itemsForDb,
-      subtotal: sub,
-      discount: disc,
-      total: total,
-      note: note || null,
-      proof_url: proofUrlHolder.url,
-      status: 'pending',
-      is_student: isStud,
-      pickup_campus: pickupCampus,
-      pickup_location: pickupLocation,
-      pickup_datetime: pickupDatetime
-    };
-    return sb.from('orders').insert([row]).select().then(function(res){
+    return sb.rpc('submit_order', {
+      p_customer_code: custCode,
+      p_customer_name: name,
+      p_customer_phone: phone,
+      p_items: itemsForDb,
+      p_subtotal: sub,
+      p_discount: disc,
+      p_total: total,
+      p_note: note || null,
+      p_proof_url: proofUrlHolder.url,
+      p_is_student: isStud,
+      p_pickup_campus: pickupCampus,
+      p_pickup_location: pickupLocation,
+      p_pickup_datetime: pickupDatetime
+    }).then(function(res){
       if(res.error){
         var e = new Error('Gagal menyimpan data order: ' + res.error.message);
         e.stage = 'insert';
         throw e;
       }
-      var savedRow = (res.data && res.data[0]) ? res.data[0] : {};
-      return savedRow.queue_number || null;
+      return res.data || null;
     });
   });
 }
