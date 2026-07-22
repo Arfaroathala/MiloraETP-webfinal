@@ -178,7 +178,10 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
     </div>
 
     <div class="toolbar">
-      <h2>Riwayat Pesanan</h2>
+      <div>
+        <h2>Riwayat Pesanan</h2>
+        <div id="lastChecked" style="font-size:11px;color:var(--wood-light);margin-top:2px;">Belum dimuat</div>
+      </div>
       <div style="display:flex;gap:8px;">
         <button class="btn-refresh" id="exportBtn" onclick="exportToExcel()" style="background:var(--wood);">Export Excel</button>
         <button class="btn-refresh" id="refreshBtn" onclick="loadOrders()">Refresh</button>
@@ -214,6 +217,12 @@ var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 var currentOrders = [];
 var filteredOrders = [];
 var manualClosedState = false;
+var AUTO_REFRESH_MS = 20000; // auto-refresh tiap 20 detik
+var pollTimer = null;
+var isLoadingOrders = false;
+var knownOrderIds = null;   // null = belum pernah load (jangan bunyiin notif di load pertama)
+var lastDataSignature = null;
+var audioCtx = null;
 
 function rp(n){ return 'Rp' + Number(n).toLocaleString('id-ID'); }
 
@@ -312,6 +321,7 @@ function doLogin(){
 }
 
 function doLogout(){
+  stopPolling();
   sb.auth.signOut().then(function(){
     document.getElementById('dashboard').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
@@ -325,6 +335,7 @@ function showDashboard(){
   document.getElementById('dashboard').style.display = 'block';
   loadOrders();
   loadManualClosedState();
+  startPolling();
 }
 
 // Check existing session on page load
@@ -404,22 +415,120 @@ function exportToExcel(){
   showToast('File Excel berhasil di-export!');
 }
 
-function loadOrders(){
+function setLastChecked(ok){
+  var el = document.getElementById('lastChecked');
+  if(!el) return;
+  var t = new Date().toLocaleTimeString('id-ID');
+  if(ok){
+    el.textContent = 'Terakhir dicek: ' + t + ' (otomatis tiap ' + (AUTO_REFRESH_MS/1000) + ' detik)';
+    el.style.color = 'var(--wood-light)';
+  } else {
+    el.textContent = 'Gagal cek terbaru (' + t + ') \u2014 koneksi bermasalah, data di layar mungkin belum update';
+    el.style.color = '#C62828';
+  }
+}
+
+function loadOrders(silent){
+  if(isLoadingOrders) return;
+  isLoadingOrders = true;
   var btn = document.getElementById('refreshBtn');
-  btn.disabled = true;
-  btn.textContent = 'Memuat...';
+  if(!silent){
+    btn.disabled = true;
+    btn.textContent = 'Memuat...';
+  }
 
   sb.from('orders').select('*').order('created_at', { ascending: false }).then(function(res){
-    btn.disabled = false;
-    btn.textContent = 'Refresh';
+    isLoadingOrders = false;
+    if(!silent){
+      btn.disabled = false;
+      btn.textContent = 'Refresh';
+    }
     if(res.error){
-      showToast('Gagal memuat data: ' + res.error.message);
+      setLastChecked(false);
+      if(!silent) showToast('Gagal memuat data: ' + res.error.message);
       return;
     }
-    currentOrders = res.data || [];
+    setLastChecked(true);
+    var data = res.data || [];
+
+    // Deteksi order baru untuk notifikasi (skip di load pertama)
+    if(knownOrderIds !== null){
+      var newOnes = 0;
+      for(var i=0;i<data.length;i++){
+        if(!knownOrderIds[data[i].id]) newOnes++;
+      }
+      if(newOnes > 0){
+        showToast('\ud83d\udd14 ' + newOnes + ' pesanan baru masuk!');
+        playDing();
+      }
+    }
+    knownOrderIds = {};
+    for(var k=0;k<data.length;k++) knownOrderIds[data[k].id] = true;
+
+    // Skip render kalau data tidak berubah, biar layar tidak "loncat" saat auto-refresh
+    var sig = JSON.stringify(data);
+    if(sig === lastDataSignature) return;
+    lastDataSignature = sig;
+
+    currentOrders = data;
     renderStats();
     applyFilters();
+  }).catch(function(){
+    isLoadingOrders = false;
+    if(!silent){
+      btn.disabled = false;
+      btn.textContent = 'Refresh';
+    }
+    setLastChecked(false);
   });
+}
+
+// ============ AUTO-REFRESH & NOTIFIKASI ============
+function startPolling(){
+  stopPolling();
+  pollTimer = setInterval(function(){
+    if(document.visibilityState === 'visible'){
+      loadOrders(true);
+      loadManualClosedState();
+    }
+  }, AUTO_REFRESH_MS);
+}
+function stopPolling(){
+  if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+}
+
+// Refresh langsung tiap admin balik ke tab ini (misal habis dari WhatsApp)
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible' && document.getElementById('dashboard').style.display === 'block'){
+    loadOrders(true);
+    loadManualClosedState();
+  }
+});
+
+// Audio "ding" untuk order baru. Browser hanya izinkan bunyi setelah
+// ada interaksi user, jadi kita "buka kunci" audionya di klik pertama.
+function initAudio(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }catch(e){}
+}
+document.addEventListener('click', initAudio);
+
+function playDing(){
+  try{
+    if(!audioCtx || audioCtx.state !== 'running') return;
+    var o = audioCtx.createOscillator();
+    var g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type = 'sine';
+    o.frequency.value = 880;
+    var t = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    o.start(t); o.stop(t + 0.6);
+  }catch(e){}
 }
 
 function applyFilters(){
