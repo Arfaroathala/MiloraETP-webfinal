@@ -123,6 +123,23 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
 .btn-toggle-order.is-closed{background:#C62828;}
 .btn-toggle-order:disabled{opacity:.6;cursor:not-allowed;}
 
+.identity-bar{display:none;align-items:center;justify-content:space-between;gap:12px;background:var(--warm-white);border:1.5px solid var(--border);border-radius:16px;padding:12px 18px;margin-bottom:16px;flex-wrap:wrap;}
+.identity-badge{font-size:12.5px;font-weight:700;}
+.identity-badge.owner{color:var(--gold-dark);}
+.identity-badge.investor{color:#6A1B9A;}
+.identity-badge.staff{color:var(--wood);}
+.name-picker-select{border:1.5px solid var(--border);border-radius:12px;padding:8px 14px;font-family:var(--font-body);font-size:13px;background:white;color:var(--brown-text);cursor:pointer;}
+
+.status-inprod{background:#FFF3E0;color:#E65100;border:1px solid #FFCC80;}
+.status-ready{background:#E1F5FE;color:#0277BD;border:1px solid #81D4FA;}
+.payment-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-left:6px;}
+.payment-pending{background:#FFF8E1;color:#F57F17;border:1px solid #FFE082;}
+.payment-paid{background:#F1F8F2;color:#66884C;border:1px solid #CFE3CF;}
+.payment-failed{background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A;}
+.payment-refund_pending{background:#FCE4EC;color:#AD1457;border:1px solid #F48FB1;}
+.payment-refunded{background:#EFEBE9;color:#6D4C41;border:1px solid #BCAAA4;}
+.btn-status.verify{background:#2E7D32;color:white;border-color:#2E7D32;}
+
 @media(max-width:600px){
   .stats-grid{grid-template-columns:1fr;}
   .order-body{grid-template-columns:1fr;}
@@ -163,6 +180,15 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
   </div>
 
   <div class="container">
+    <div class="identity-bar" id="identityBar">
+      <div id="identityDisplay"></div>
+      <div id="namePickerWrap" style="display:none;">
+        <select id="namePicker" class="name-picker-select" onchange="onPickName()">
+          <option value="">-- Pilih nama kamu --</option>
+        </select>
+      </div>
+    </div>
+
     <div class="stats-grid">
       <div class="stat-card"><div class="sv" id="stTotal">0</div><div class="sl">Total Pesanan</div></div>
       <div class="stat-card"><div class="sv" id="stRev">Rp0</div><div class="sl">Total Revenue</div></div>
@@ -192,8 +218,10 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
       <input type="text" id="searchInput" class="search-input" placeholder="Cari nama, kode, atau nomor WA..." oninput="applyFilters()"/>
       <select id="statusFilter" class="status-filter" onchange="applyFilters()">
         <option value="all">Semua Status</option>
-        <option value="pending" selected>Baru</option>
+        <option value="unverified" selected>Menunggu Verifikasi</option>
         <option value="confirmed">Dikonfirmasi</option>
+        <option value="in_production">Sedang Dimasak</option>
+        <option value="ready">Siap Diambil</option>
         <option value="completed">Selesai</option>
         <option value="no_show">Tidak Diambil</option>
         <option value="cancelled">Dibatalkan</option>
@@ -223,8 +251,87 @@ var isLoadingOrders = false;
 var knownOrderIds = null;   // null = belum pernah load (jangan bunyiin notif di load pertama)
 var lastDataSignature = null;
 var audioCtx = null;
+var currentIdentity = null; // {mode:'owner'|'investor'|'staff', name, role}
+var currentActorName = null;
+var STAFF_NAME_KEY = 'meltygo_staff_name';
 
 function rp(n){ return 'Rp' + Number(n).toLocaleString('id-ID'); }
+
+function findOrder(id){
+  for(var i=0;i<currentOrders.length;i++) if(currentOrders[i].id === id) return currentOrders[i];
+  return null;
+}
+
+// ============ IDENTITAS (Owner/Investor terverifikasi, atau Staff bersama) ============
+function resolveIdentity(){
+  sb.auth.getUser().then(function(res){
+    var uid = res.data && res.data.user ? res.data.user.id : null;
+    if(!uid) return;
+    sb.from('staff').select('name,role').eq('auth_user_id', uid).maybeSingle().then(function(r){
+      if(r.data){
+        currentIdentity = { mode: r.data.role, name: r.data.name };
+      } else {
+        currentIdentity = { mode: 'staff', name: null };
+      }
+      applyIdentityUI();
+    });
+  });
+}
+
+function applyIdentityUI(){
+  var bar = document.getElementById('identityBar');
+  var disp = document.getElementById('identityDisplay');
+  var pickerWrap = document.getElementById('namePickerWrap');
+  var toggleBar = document.querySelector('.order-toggle-bar');
+  bar.style.display = 'flex';
+
+  if(currentIdentity.mode === 'owner'){
+    disp.innerHTML = '<span class="identity-badge owner">&#128081; Owner: ' + currentIdentity.name + '</span>';
+    pickerWrap.style.display = 'none';
+    currentActorName = currentIdentity.name;
+  } else if(currentIdentity.mode === 'investor'){
+    disp.innerHTML = '<span class="identity-badge investor">&#128065; Investor: ' + currentIdentity.name + ' (read-only)</span>';
+    pickerWrap.style.display = 'none';
+    currentActorName = currentIdentity.name;
+    if(toggleBar) toggleBar.style.display = 'none';
+  } else {
+    disp.innerHTML = '<span class="identity-badge staff">&#128100; Login Staff Bersama</span>';
+    pickerWrap.style.display = 'block';
+    currentActorName = localStorage.getItem(STAFF_NAME_KEY) || null;
+    loadStaffNames();
+  }
+
+  // Render ulang daftar yang sudah ter-cache (kalau ada), supaya tombol aksi
+  // langsung sesuai identitas walau data order sendiri belum berubah.
+  if(currentOrders.length > 0) renderOrders();
+}
+
+function loadStaffNames(){
+  sb.from('staff').select('name').eq('role','staff').eq('active', true).order('name').then(function(r){
+    var sel = document.getElementById('namePicker');
+    var names = (r.data || []);
+    var opts = '<option value="">-- Pilih nama kamu --</option>';
+    for(var i=0;i<names.length;i++){
+      var nm = names[i].name;
+      opts += '<option value="' + nm + '"' + (nm === currentActorName ? ' selected' : '') + '>' + nm + '</option>';
+    }
+    sel.innerHTML = opts;
+  });
+}
+
+function onPickName(){
+  var sel = document.getElementById('namePicker');
+  currentActorName = sel.value || null;
+  if(currentActorName) localStorage.setItem(STAFF_NAME_KEY, currentActorName);
+}
+
+function requireActor(){
+  if(currentIdentity && currentIdentity.mode === 'staff' && !currentActorName){
+    showToast('Pilih nama kamu dulu di dropdown atas ya!');
+    return false;
+  }
+  return true;
+}
 
 function formatWaLink(phone){
   if(!phone) return null;
@@ -333,6 +440,7 @@ function doLogout(){
 function showDashboard(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
+  resolveIdentity();
   loadOrders();
   loadManualClosedState();
   startPolling();
@@ -539,7 +647,9 @@ function applyFilters(){
   var statusVal = document.getElementById('statusFilter').value;
 
   filteredOrders = currentOrders.filter(function(o){
-    var matchesStatus = (statusVal === 'all') || ((o.status || 'pending') === statusVal);
+    var matchesStatus = (statusVal === 'all')
+      || (statusVal === 'unverified' && (o.status === null || o.status === undefined))
+      || (o.status === statusVal);
     if(!matchesStatus) return false;
     if(!searchTerm) return true;
     var haystack = ((o.customer_name||'') + ' ' + (o.customer_code||'') + ' ' + (o.customer_phone||'')).toLowerCase();
@@ -572,18 +682,94 @@ function dateKeyOf(dtStr){
 }
 
 function statusLabelOf(status){
-  if(status === 'pending') return 'Baru';
+  if(status === null || status === undefined || status === 'pending') return 'Menunggu Verifikasi';
   if(status === 'confirmed') return 'Dikonfirmasi';
+  if(status === 'in_production') return 'Sedang Dimasak';
+  if(status === 'ready') return 'Siap Diambil';
   if(status === 'completed') return 'Selesai';
   if(status === 'no_show') return 'Tidak Diambil';
   if(status === 'cancelled') return 'Dibatalkan';
   return status;
 }
 
+function statusClsOf(status){
+  if(status === null || status === undefined || status === 'pending') return 'status-pending';
+  if(status === 'in_production') return 'status-inprod';
+  if(status === 'ready') return 'status-ready';
+  return 'status-' + status;
+}
+
+function paymentLabelOf(ps){
+  if(ps === 'pending') return 'Bayar: Menunggu';
+  if(ps === 'paid') return 'Bayar: Lunas';
+  if(ps === 'failed') return 'Bayar: Gagal';
+  if(ps === 'refund_pending') return 'Bayar: Proses Refund';
+  if(ps === 'refunded') return 'Bayar: Direfund';
+  return 'Bayar: ' + ps;
+}
+
+// ============ Aksi RPC baru (order v2) ============
+var NEXT_TRANSITIONS = {
+  'confirmed': [['in_production','Mulai Masak','']],
+  'in_production': [['ready','Siap Diambil','']],
+  'ready': [['completed','Selesai Diambil',''],['no_show','Tidak Diambil','neutral']]
+};
+var CANCELABLE_FROM = ['confirmed','in_production'];
+
+function approvePayment(orderId){
+  if(!requireActor()) return;
+  sb.rpc('record_payment_result', { p_order_id: orderId, p_result: 'paid', p_actor_display_name: currentActorName }).then(function(res){
+    if(res.error){ showToast('Gagal: ' + res.error.message); return; }
+    var data = res.data;
+    if(data && data.success === false){ showToast(data.error); return; }
+    showToast('Pembayaran disetujui' + (data && data.queue_number ? ', nomor antrian: ' + data.queue_number : ''));
+    loadOrders();
+  });
+}
+
+function rejectPayment(orderId){
+  if(!requireActor()) return;
+  if(!confirm('Yakin tolak bukti pembayaran ini?')) return;
+  sb.rpc('record_payment_result', { p_order_id: orderId, p_result: 'failed', p_actor_display_name: currentActorName }).then(function(res){
+    if(res.error){ showToast('Gagal: ' + res.error.message); return; }
+    var data = res.data;
+    if(data && data.success === false){ showToast(data.error); return; }
+    showToast('Pembayaran ditolak');
+    loadOrders();
+  });
+}
+
+function reopenPayment(orderId){
+  if(!currentIdentity || currentIdentity.mode !== 'owner'){ showToast('Cuma Owner yang bisa buka ulang'); return; }
+  var reason = prompt('Alasan buka ulang pembayaran ini:');
+  if(!reason || !reason.trim()){ showToast('Alasan wajib diisi'); return; }
+  sb.rpc('reopen_failed_payment', { p_order_id: orderId, p_reason: reason }).then(function(res){
+    if(res.error){ showToast('Gagal: ' + res.error.message); return; }
+    var data = res.data;
+    if(data && data.success === false){ showToast(data.error); return; }
+    showToast('Pembayaran dibuka ulang untuk ditinjau lagi');
+    loadOrders();
+  });
+}
+
+function advanceOrderStatus(orderId, newStatus){
+  if(!requireActor()) return;
+  sb.rpc('change_order_status', { p_order_id: orderId, p_new_status: newStatus, p_actor_display_name: currentActorName }).then(function(res){
+    if(res.error){ showToast('Gagal: ' + res.error.message); return; }
+    var data = res.data;
+    if(data && data.success === false){ showToast(data.error); return; }
+    showToast('Status diperbarui: ' + statusLabelOf(newStatus));
+    loadOrders();
+  });
+}
+
 function renderOrderCard(o){
-  var status = o.status || 'pending';
-  var statusLabel = statusLabelOf(status);
-  var statusCls = 'status-' + status;
+  var rawStatus = o.status; // null = belum lolos verifikasi pembayaran
+  var status = rawStatus || 'pending';
+  var statusLabel = statusLabelOf(rawStatus);
+  var statusCls = statusClsOf(rawStatus);
+  var isLegacyOrder = (o.payment_status === null || o.payment_status === undefined);
+  var paymentStatus = o.payment_status || 'paid'; // buat tampilan badge, data lama dianggap lunas
 
   var itemsHtml = '';
   if(Array.isArray(o.items)){
@@ -627,6 +813,7 @@ function renderOrderCard(o){
   if(o.customer_phone) h += '<div class="order-phone">' + o.customer_phone + '</div>';
   h += '<div class="order-time">' + timeStr + '</div></div>';
   h += '<span class="status-badge ' + statusCls + '">' + statusLabel + '</span>';
+  h += '<span class="payment-badge payment-' + paymentStatus + '">' + paymentLabelOf(paymentStatus) + '</span>';
   h += '</div>';
   h += '<div class="order-body">';
   h += '<div><div class="order-items">' + itemsHtml + '</div>';
@@ -651,11 +838,44 @@ function renderOrderCard(o){
   h += proofHtml;
   h += '</div>';
   h += '<div class="order-actions">';
-  h += '<button class="btn-status' + (status==='pending'?' active':'') + '" onclick="setStatus(' + o.id + ',\'pending\')">Baru</button>';
-  h += '<button class="btn-status' + (status==='confirmed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'confirmed\')">Dikonfirmasi</button>';
-  h += '<button class="btn-status' + (status==='completed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'completed\')">Selesai</button>';
-  h += '<button class="btn-status neutral' + (status==='no_show'?' active':'') + '" onclick="setStatus(' + o.id + ',\'no_show\')">Tidak Diambil</button>';
-  h += '<button class="btn-status danger' + (status==='cancelled'?' active':'') + '" onclick="setStatus(' + o.id + ',\'cancelled\')">Batalkan</button>';
+  var isInvestor = currentIdentity && currentIdentity.mode === 'investor';
+
+  if(isInvestor){
+    h += '<span style="font-size:11px;color:var(--wood-light);padding:7px 4px;">Mode Investor &mdash; lihat saja</span>';
+  } else if(isLegacyOrder){
+    // Order dari sistem lama (belum pernah lewat submit_order_v2) — tombol lama tetap berfungsi
+    h += '<button class="btn-status' + (status==='pending'?' active':'') + '" onclick="setStatus(' + o.id + ',\'pending\')">Baru</button>';
+    h += '<button class="btn-status' + (status==='confirmed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'confirmed\')">Dikonfirmasi</button>';
+    h += '<button class="btn-status' + (status==='completed'?' active':'') + '" onclick="setStatus(' + o.id + ',\'completed\')">Selesai</button>';
+    h += '<button class="btn-status neutral' + (status==='no_show'?' active':'') + '" onclick="setStatus(' + o.id + ',\'no_show\')">Tidak Diambil</button>';
+    h += '<button class="btn-status danger' + (status==='cancelled'?' active':'') + '" onclick="setStatus(' + o.id + ',\'cancelled\')">Batalkan</button>';
+  } else if(paymentStatus === 'pending'){
+    // Order baru, menunggu staff verifikasi bukti bayar
+    h += '<button class="btn-status verify" onclick="approvePayment(' + o.id + ')">&#10003; Setujui Bayar</button>';
+    h += '<button class="btn-status danger" onclick="rejectPayment(' + o.id + ')">Tolak</button>';
+  } else if(paymentStatus === 'failed'){
+    if(currentIdentity && currentIdentity.mode === 'owner'){
+      h += '<button class="btn-status" onclick="reopenPayment(' + o.id + ')">Buka Ulang (Owner)</button>';
+    } else {
+      h += '<span style="font-size:11px;color:var(--wood-light);padding:7px 4px;">Pembayaran ditolak &mdash; cuma Owner yang bisa buka ulang</span>';
+    }
+  } else if(paymentStatus === 'refund_pending' || paymentStatus === 'refunded'){
+    h += '<span style="font-size:11px;color:var(--wood-light);padding:7px 4px;">Status refund &mdash; belum ada aksi otomatis</span>';
+  } else {
+    // Sudah lunas (paid) — tombol transisi dapur
+    var transitions = NEXT_TRANSITIONS[rawStatus] || [];
+    for(var t=0;t<transitions.length;t++){
+      var tr = transitions[t];
+      h += '<button class="btn-status ' + tr[2] + '" onclick="advanceOrderStatus(' + o.id + ',\'' + tr[0] + '\')">' + tr[1] + '</button>';
+    }
+    if(CANCELABLE_FROM.indexOf(rawStatus) > -1){
+      h += '<button class="btn-status danger" onclick="advanceOrderStatus(' + o.id + ',\'cancelled\')">Batalkan</button>';
+    }
+    if(transitions.length === 0 && CANCELABLE_FROM.indexOf(rawStatus) === -1){
+      h += '<span style="font-size:11px;color:var(--wood-light);padding:7px 4px;">Pesanan sudah selesai diproses</span>';
+    }
+  }
+
   if(waLink) h += '<a class="btn-chat-wa" href="' + waLink + '" target="_blank">Chat WhatsApp</a>';
   h += '</div>';
   h += '</div>';
