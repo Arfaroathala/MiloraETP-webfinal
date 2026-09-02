@@ -188,7 +188,6 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
         </select>
       </div>
     </div>
-    <div id="debugBox" style="background:#3E2A14;color:#FFE4CC;font-size:10.5px;font-family:monospace;padding:10px 14px;border-radius:10px;margin-bottom:16px;word-break:break-all;line-height:1.6;"></div>
 
     <div class="stats-grid">
       <div class="stat-card"><div class="sv" id="stTotal">0</div><div class="sl">Total Pesanan</div></div>
@@ -267,18 +266,13 @@ function findOrder(id){
 function resolveIdentity(){
   sb.auth.getUser().then(function(res){
     var uid = res.data && res.data.user ? res.data.user.id : null;
-    var email = res.data && res.data.user ? res.data.user.email : null;
-    console.log('DEBUG resolveIdentity — uid:', uid, 'email:', email);
     if(!uid) return;
     sb.from('staff').select('name,role').eq('auth_user_id', uid).maybeSingle().then(function(r){
-      console.log('DEBUG staff match:', r.data, r.error);
       if(r.data){
         currentIdentity = { mode: r.data.role, name: r.data.name };
       } else {
         currentIdentity = { mode: 'staff', name: null };
       }
-      var dbg = document.getElementById('debugBox');
-      if(dbg) dbg.textContent = 'DEBUG — UID login: ' + uid + ' | Email: ' + email + ' | Match staff: ' + (r.data ? (r.data.name + ' (' + r.data.role + ')') : 'TIDAK KETEMU') + (r.error ? ' | ERROR: ' + r.error.message : '');
       applyIdentityUI();
     });
   });
