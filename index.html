@@ -631,6 +631,20 @@ footer{background:#3E2A14;color:rgba(255,255,255,.6);padding:56px 0 32px;}
   </div>
 </section>
 
+<section id="cekstatus">
+  <div class="container" style="max-width:560px;">
+    <div class="section-label" style="text-align:center;">Sudah Order?</div>
+    <h2 class="section-title" style="text-align:center;">Cek Status Pesanan</h2>
+    <p style="color:#7A5535;font-size:14px;text-align:center;max-width:440px;margin:0 auto 28px;line-height:1.7;">Masukkan kode pesanan dan nomor WhatsApp yang kamu daftarkan saat checkout.</p>
+    <div style="background:var(--warm-white);border:1px solid var(--border);border-radius:20px;padding:24px;box-shadow:0 8px 24px var(--shadow);">
+      <input type="text" id="statusCode" placeholder="Kode Pesanan (contoh: MLR-XXXXX)" maxlength="20" style="width:100%;border:1.5px solid var(--border);border-radius:12px;padding:13px 16px;font-family:var(--font-body);font-size:14px;color:var(--brown-text);background:white;outline:none;margin-bottom:12px;text-transform:uppercase;"/>
+      <input type="tel" id="statusPhone" placeholder="Nomor WhatsApp" style="width:100%;border:1.5px solid var(--border);border-radius:12px;padding:13px 16px;font-family:var(--font-body);font-size:14px;color:var(--brown-text);background:white;outline:none;margin-bottom:16px;"/>
+      <button onclick="checkOrderStatus()" id="statusCheckBtn" style="width:100%;background:linear-gradient(135deg,var(--wood),var(--gold-dark));color:white;border:none;padding:14px;border-radius:12px;font-family:var(--font-body);font-size:15px;font-weight:600;cursor:pointer;">Cek Status</button>
+      <div id="statusResult" style="margin-top:18px;"></div>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="container">
     <div class="footer-inner">
@@ -1478,6 +1492,65 @@ function applyVoucher(){
     res.textContent='Kode "' + code + '" tidak valid.';
     updCart(); showToast('Kode tidak valid','err');
   }
+}
+
+function statusStepLabel(paymentStatus, status){
+  if(paymentStatus === 'pending') return { label: 'Menunggu Verifikasi Pembayaran', color: '#E65100' };
+  if(paymentStatus === 'failed') return { label: 'Pembayaran Ditolak — hubungi admin via WhatsApp', color: '#C62828' };
+  if(status === 'confirmed') return { label: 'Dikonfirmasi, Segera Diproses', color: '#1565C0' };
+  if(status === 'in_production') return { label: 'Sedang Dimasak', color: '#A07830' };
+  if(status === 'ready') return { label: 'Siap Diambil! Ke Kios Ilong Ya', color: '#2E7D32' };
+  if(status === 'completed') return { label: 'Selesai — Sudah Diambil', color: '#7B4F2E' };
+  if(status === 'cancelled') return { label: 'Dibatalkan', color: '#C62828' };
+  if(status === 'no_show') return { label: 'Tidak Diambil', color: '#6D4C41' };
+  return { label: status || 'Diproses', color: '#7B4F2E' };
+}
+
+function checkOrderStatus(){
+  var code = document.getElementById('statusCode').value.trim();
+  var phone = document.getElementById('statusPhone').value.trim();
+  var resultBox = document.getElementById('statusResult');
+  var btn = document.getElementById('statusCheckBtn');
+
+  if(!code || !phone){
+    resultBox.innerHTML = '<div style="color:#C62828;font-size:13px;text-align:center;">Isi kode pesanan dan nomor WhatsApp dulu ya.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Mencari...';
+  resultBox.innerHTML = '';
+
+  sb.rpc('get_order_status', { p_customer_code: code, p_customer_phone: phone }).then(function(res){
+    btn.disabled = false;
+    btn.textContent = 'Cek Status';
+
+    if(res.error || !res.data || !res.data.found){
+      resultBox.innerHTML = '<div style="background:#FFF3E0;border:1px solid #FFCC80;border-radius:12px;padding:14px 16px;color:#E65100;font-size:13px;text-align:center;">Pesanan tidak ditemukan. Cek lagi kode dan nomor WhatsApp-nya ya.</div>';
+      return;
+    }
+
+    var d = res.data;
+    var st = statusStepLabel(d.payment_status, d.status);
+    var itemsHtml = '';
+    if(Array.isArray(d.items)){
+      for(var i=0;i<d.items.length;i++){
+        itemsHtml += '<div style="font-size:13px;color:var(--brown-text);padding:3px 0;">' + (i+1) + '. ' + d.items[i].name + '</div>';
+      }
+    }
+    var queueHtml = d.queue_number ? '<div style="text-align:center;margin:14px 0;"><div style="font-size:11px;color:var(--wood-light);text-transform:uppercase;letter-spacing:.08em;">Nomor Antrian</div><div style="font-family:var(--font-display);font-size:32px;font-weight:700;color:var(--gold-dark);">' + String(d.queue_number).padStart(3,'0') + '</div></div>' : '';
+
+    resultBox.innerHTML =
+      '<div style="text-align:center;margin-bottom:6px;font-size:13px;color:var(--wood-light);">' + d.customer_code + ' &middot; ' + d.customer_name + '</div>' +
+      '<div style="text-align:center;background:' + st.color + '18;border:1.5px solid ' + st.color + ';color:' + st.color + ';border-radius:20px;padding:10px 16px;font-weight:700;font-size:13.5px;margin-bottom:10px;">' + st.label + '</div>' +
+      queueHtml +
+      '<div style="border-top:1px dashed var(--border);margin:14px 0;padding-top:14px;">' + itemsHtml + '</div>' +
+      '<div style="text-align:right;font-weight:700;color:var(--gold-dark);font-size:15px;">Total: Rp' + Number(d.total).toLocaleString('id-ID') + '</div>';
+  }).catch(function(){
+    btn.disabled = false;
+    btn.textContent = 'Cek Status';
+    resultBox.innerHTML = '<div style="color:#C62828;font-size:13px;text-align:center;">Gagal terhubung, coba lagi ya.</div>';
+  });
 }
 
 function openLB(i){
