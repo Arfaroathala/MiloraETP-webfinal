@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Costing & R&D — Milora Enterprise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --cream:#FAF6EE;--gold:#C9A84C;--gold-dark:#A07830;--wood:#7B4F2E;
+  --wood-light:#A0714F;--brown-text:#3E2A14;--warm-white:#FFFCF5;
+  --border:#D4B483;--shadow:rgba(123,79,46,0.15);
+  --font-display:'Playfair Display',serif;--font-body:'DM Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text);min-height:100vh;}
+#loginScreen,#deniedScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+.card{background:var(--warm-white);border:1px solid var(--border);border-radius:24px;padding:36px 28px;max-width:400px;width:100%;box-shadow:0 20px 60px var(--shadow);text-align:center;}
+.card h1{font-family:var(--font-display);font-size:21px;margin-bottom:4px;}
+.card p{font-size:13px;color:var(--wood-light);margin-bottom:24px;}
+.inp{width:100%;border:1.5px solid var(--border);border-radius:12px;padding:13px 16px;font-family:var(--font-body);font-size:14px;color:var(--brown-text);background:white;outline:none;margin-bottom:12px;}
+.inp:focus{border-color:var(--gold);}
+.btn-main{width:100%;background:linear-gradient(135deg,var(--wood),var(--gold-dark));color:white;border:none;padding:14px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;}
+.btn-main:disabled{opacity:.5;}
+.err-box{font-size:12px;color:#C62828;margin-top:12px;display:none;background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:8px 12px;}
+.err-box.show{display:block;}
+#dashboard{display:none;}
+.dash-header{background:linear-gradient(135deg,var(--wood),var(--gold-dark));padding:20px 24px;display:flex;align-items:center;justify-content:space-between;}
+.dash-header h1{font-family:var(--font-display);color:white;font-size:19px;}
+.dash-header p{color:rgba(255,255,255,.8);font-size:11px;}
+.btn-logout{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:20px;font-size:12px;cursor:pointer;}
+.container{max-width:820px;margin:0 auto;padding:24px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="card">
+    <h1>Costing & R&D</h1>
+    <p>Khusus Owner — Milora Enterprise</p>
+    <input type="email" class="inp" id="loginEmail" placeholder="Email"/>
+    <input type="password" class="inp" id="loginPass" placeholder="Password"/>
+    <button class="btn-main" id="loginBtn" onclick="doLogin()">Masuk</button>
+    <div class="err-box" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="deniedScreen" style="display:none;">
+  <div class="card">
+    <h1>Akses Ditolak</h1>
+    <p>Halaman ini khusus Owner. Akun kamu tidak punya akses ke fitur Costing & R&D.</p>
+    <button class="btn-main" onclick="doLogout()">Keluar</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="dash-header">
+    <div><h1>Costing & R&D</h1><p id="ownerLabel">Milora Enterprise</p></div>
+    <button class="btn-logout" onclick="doLogout()">Keluar</button>
+  </div>
+  <div class="container">
+    <p style="color:var(--wood-light);font-size:13px;">Kerangka dasar berhasil dimuat. Fitur Kelola Bahan menyusul di langkah berikutnya.</p>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://sixwcjbhqydufapxftip.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpeHdjamJocXlkdWZhcHhmdGlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ5MDMsImV4cCI6MjA5OTAyMDkwM30.zBNVRIKoypww2mDLeVJXZPbfheNPJ2VFV_Rs44jfChQ';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var currentOwnerName = null;
+
+function doLogin(){
+  var email = document.getElementById('loginEmail').value.trim();
+  var pass = document.getElementById('loginPass').value;
+  var errEl = document.getElementById('loginErr');
+  var btn = document.getElementById('loginBtn');
+  errEl.classList.remove('show');
+  if(!email || !pass){ errEl.textContent='Isi email dan password dulu.'; errEl.classList.add('show'); return; }
+  btn.disabled = true; btn.textContent = 'Memeriksa...';
+  sb.auth.signInWithPassword({ email:email, password:pass }).then(function(res){
+    btn.disabled = false; btn.textContent = 'Masuk';
+    if(res.error){ errEl.textContent = 'Email atau password salah.'; errEl.classList.add('show'); return; }
+    checkAccessAndShow();
+  });
+}
+
+function doLogout(){
+  sb.auth.signOut().then(function(){
+    document.getElementById('dashboard').style.display='none';
+    document.getElementById('deniedScreen').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+  });
+}
+
+// PENTING: ini cuma nentuin TAMPILAN. Penegakan sesungguhnya ada di RLS
+// (is_owner()) pada tabel cost_items dkk dari Step 1 — staff yang nyasar
+// ke sini pun query-nya akan ditolak database, bukan cuma disembunyikan UI.
+function checkAccessAndShow(){
+  sb.auth.getUser().then(function(res){
+    var uid = res.data && res.data.user ? res.data.user.id : null;
+    if(!uid){ doLogout(); return; }
+    sb.from('staff').select('name,role').eq('auth_user_id', uid).eq('role','owner').eq('active', true).maybeSingle().then(function(r){
+      if(!r.data){
+        document.getElementById('loginScreen').style.display='none';
+        document.getElementById('deniedScreen').style.display='flex';
+        return;
+      }
+      currentOwnerName = r.data.name;
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      document.getElementById('ownerLabel').textContent = 'Owner: ' + currentOwnerName;
+    });
+  });
+}
+
+sb.auth.getSession().then(function(res){ if(res.data && res.data.session) checkAccessAndShow(); });
+</script>
+</body>
+</html>
