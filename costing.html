@@ -33,6 +33,28 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
 .dash-header p{color:rgba(255,255,255,.8);font-size:11px;}
 .btn-logout{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:20px;font-size:12px;cursor:pointer;}
 .container{max-width:820px;margin:0 auto;padding:24px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.section-head h2{font-family:var(--font-display);font-size:19px;}
+.btn-add{background:var(--gold-dark);color:white;border:none;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;}
+.mat-card{background:var(--warm-white);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:10px;}
+.mat-top{display:flex;justify-content:space-between;align-items:center;}
+.mat-name{font-weight:700;font-size:15px;}
+.mat-inactive{opacity:.5;}
+.mat-price{color:var(--gold-dark);font-weight:700;font-size:14px;}
+.mat-sub{font-size:11.5px;color:var(--wood-light);margin-top:3px;}
+.badge-inactive{background:#EEE;color:#888;font-size:10px;padding:2px 8px;border-radius:10px;margin-left:8px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(62,42,20,.55);z-index:1000;display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--cream);border-radius:24px 24px 0 0;padding:26px 22px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;}
+.modal-box h3{font-family:var(--font-display);font-size:18px;margin-bottom:16px;}
+label{font-size:12px;font-weight:600;color:var(--wood);display:block;margin-bottom:5px;margin-top:12px;}
+select.inp{cursor:pointer;}
+.btn-row{display:flex;gap:10px;margin-top:20px;}
+.btn-cancel{flex:1;background:white;border:1.5px solid var(--border);color:var(--wood);padding:13px;border-radius:12px;font-weight:600;cursor:pointer;}
+.btn-save{flex:2;background:var(--gold-dark);color:white;border:none;padding:13px;border-radius:12px;font-weight:600;cursor:pointer;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--brown-text);color:white;padding:13px 22px;border-radius:14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:9999;opacity:0;transition:.3s;max-width:90vw;text-align:center;}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+.empty{text-align:center;padding:40px 20px;color:var(--wood-light);font-size:13px;}
 </style>
 </head>
 <body>
@@ -62,9 +84,33 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
     <button class="btn-logout" onclick="doLogout()">Keluar</button>
   </div>
   <div class="container">
-    <p style="color:var(--wood-light);font-size:13px;">Kerangka dasar berhasil dimuat. Fitur Kelola Bahan menyusul di langkah berikutnya.</p>
+    <div class="section-head">
+      <h2>Kelola Bahan</h2>
+      <button class="btn-add" onclick="openAddMaterial()">+ Tambah Bahan</button>
+    </div>
+    <div id="materialList"></div>
   </div>
 </div>
+
+<div class="modal-overlay" id="modalAddMaterial">
+  <div class="modal-box">
+    <h3>Tambah Bahan Baru</h3>
+    <label>Nama Bahan</label>
+    <input type="text" class="inp" id="newMatName" placeholder="Contoh: Winchez"/>
+    <label>Satuan Dasar</label>
+    <select class="inp" id="newMatUnit">
+      <option value="g">gram (g)</option>
+      <option value="ml">mililiter (ml)</option>
+      <option value="pcs">pcs</option>
+    </select>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modalAddMaterial')">Batal</button>
+      <button class="btn-save" onclick="saveMaterial()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 var SUPABASE_URL = 'https://sixwcjbhqydufapxftip.supabase.co';
@@ -112,11 +158,69 @@ function checkAccessAndShow(){
       document.getElementById('loginScreen').style.display='none';
       document.getElementById('dashboard').style.display='block';
       document.getElementById('ownerLabel').textContent = 'Owner: ' + currentOwnerName;
+      loadMaterials();
     });
   });
 }
 
 sb.auth.getSession().then(function(res){ if(res.data && res.data.session) checkAccessAndShow(); });
+
+var materials = [];
+
+function showToast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+function loadMaterials(){
+  sb.from('cost_items').select('*').eq('item_type','purchased').order('name').then(function(res){
+    if(res.error){ showToast('Gagal memuat bahan: ' + res.error.message); return; }
+    materials = res.data || [];
+    renderMaterialList();
+  });
+}
+
+function renderMaterialList(){
+  var el = document.getElementById('materialList');
+  if(materials.length === 0){
+    el.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--wood-light);font-size:13px;">Belum ada bahan. Klik "+ Tambah Bahan" buat mulai.</div>';
+    return;
+  }
+  var h = '';
+  materials.forEach(function(m){
+    h += '<div class="mat-card"' + (m.active ? '' : ' style="opacity:.5;"') + '>';
+    h += '<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">' + m.name + (m.active ? '' : ' <span style="font-size:10px;color:#888;">(Nonaktif)</span>') + '</span></div>';
+    h += '<div style="font-size:11.5px;color:var(--wood-light);margin-top:3px;">Satuan dasar: ' + m.unit + ' &middot; Belum ada harga</div>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+function openAddMaterial(){
+  document.getElementById('newMatName').value = '';
+  document.getElementById('newMatUnit').value = 'g';
+  openModal('modalAddMaterial');
+}
+
+function saveMaterial(){
+  var name = document.getElementById('newMatName').value.trim();
+  var unit = document.getElementById('newMatUnit').value;
+  if(!name){ showToast('Nama bahan wajib diisi'); return; }
+  var dupe = materials.find(function(m){ return m.name.toLowerCase() === name.toLowerCase(); });
+  if(dupe){ showToast('Bahan dengan nama ini sudah ada'); return; }
+  var sku = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  sb.from('cost_items').insert([{ sku: sku, name: name, unit: unit, item_type: 'purchased', active: true }]).then(function(res){
+    if(res.error){ showToast('Gagal simpan: ' + res.error.message); return; }
+    showToast('Bahan "' + name + '" ditambahkan');
+    closeModal('modalAddMaterial');
+    loadMaterials();
+  });
+}
 </script>
 </body>
 </html>
