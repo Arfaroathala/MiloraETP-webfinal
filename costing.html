@@ -48,6 +48,10 @@ body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text
 .modal-box{background:var(--cream);border-radius:24px 24px 0 0;padding:26px 22px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;}
 .modal-box h3{font-family:var(--font-display);font-size:18px;margin-bottom:16px;}
 label{font-size:12px;font-weight:600;color:var(--wood);display:block;margin-bottom:5px;margin-top:12px;}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hist-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:12.5px;}
+.hist-row:last-child{border-bottom:none;}
+.hist-current{color:var(--gold-dark);font-weight:700;}
 select.inp{cursor:pointer;}
 .btn-row{display:flex;gap:10px;margin-top:20px;}
 .btn-cancel{flex:1;background:white;border:1.5px solid var(--border);color:var(--wood);padding:13px;border-radius:12px;font-weight:600;cursor:pointer;}
@@ -112,6 +116,36 @@ select.inp{cursor:pointer;}
 
 <div class="toast" id="toast"></div>
 
+<div class="modal-overlay" id="modalMaterialDetail">
+  <div class="modal-box">
+    <h3 id="detailMatName">Nama Bahan</h3>
+    <div id="detailCurrentPrice" style="margin-bottom:16px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Riwayat Harga</div>
+      <div id="priceHistoryList"></div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Tambah Harga Baru</div>
+      <div class="row-2">
+        <div><label>Harga Beli (Rp)</label><input type="number" class="inp" id="newPriceAmount" placeholder="64000"/></div>
+        <div><label>Jumlah</label><input type="number" class="inp" id="newPriceQty" placeholder="1"/></div>
+      </div>
+      <label>Satuan Pembelian</label>
+      <select class="inp" id="newPriceUnit"></select>
+      <div class="btn-row">
+        <button class="btn-cancel" onclick="closeModal('modalMaterialDetail')">Tutup</button>
+        <button class="btn-save" onclick="savePrice()">Simpan Harga</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="detailActiveToggle" onchange="toggleMaterialActive()"/>
+        <span style="font-size:13px;font-weight:600;">Bahan aktif (dipakai untuk resep baru)</span>
+      </label>
+    </div>
+  </div>
+</div>
+
 <script>
 var SUPABASE_URL = 'https://sixwcjbhqydufapxftip.supabase.co';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpeHdjamJocXlkdWZhcHhmdGlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ5MDMsImV4cCI6MjA5OTAyMDkwM30.zBNVRIKoypww2mDLeVJXZPbfheNPJ2VFV_Rs44jfChQ';
@@ -166,6 +200,15 @@ function checkAccessAndShow(){
 sb.auth.getSession().then(function(res){ if(res.data && res.data.session) checkAccessAndShow(); });
 
 var materials = [];
+var priceHistories = {};
+var activeDetailId = null;
+
+// Konversi metrik terbatas, hardcode & immutable — bukan tabel yang bisa diedit.
+var UNIT_OPTIONS = {
+  g:  [{v:'g', label:'gram (g)', factor:1}, {v:'kg', label:'kilogram (kg)', factor:1000}],
+  ml: [{v:'ml', label:'mililiter (ml)', factor:1}, {v:'liter', label:'liter (L)', factor:1000}],
+  pcs:[{v:'pcs', label:'pcs', factor:1}]
+};
 
 function showToast(msg){
   var t = document.getElementById('toast');
@@ -181,8 +224,26 @@ function loadMaterials(){
   sb.from('cost_items').select('*').eq('item_type','purchased').order('name').then(function(res){
     if(res.error){ showToast('Gagal memuat bahan: ' + res.error.message); return; }
     materials = res.data || [];
+    loadAllPriceHistory();
+  });
+}
+
+function loadAllPriceHistory(){
+  sb.from('cost_item_price_history').select('*').order('effective_from', {ascending:false}).then(function(res){
+    priceHistories = {};
+    (res.data || []).forEach(function(row){
+      if(!priceHistories[row.cost_item_id]) priceHistories[row.cost_item_id] = [];
+      priceHistories[row.cost_item_id].push(row);
+    });
     renderMaterialList();
   });
+}
+
+function currentPriceOf(costItemId){
+  var hist = priceHistories[costItemId] || [];
+  var now = new Date();
+  var eligible = hist.filter(function(h){ return new Date(h.effective_from) <= now; });
+  return eligible.length ? eligible[0] : null; // sudah urut terbaru duluan dari query
 }
 
 function renderMaterialList(){
@@ -193,12 +254,47 @@ function renderMaterialList(){
   }
   var h = '';
   materials.forEach(function(m){
-    h += '<div class="mat-card"' + (m.active ? '' : ' style="opacity:.5;"') + '>';
-    h += '<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">' + m.name + (m.active ? '' : ' <span style="font-size:10px;color:#888;">(Nonaktif)</span>') + '</span></div>';
-    h += '<div style="font-size:11.5px;color:var(--wood-light);margin-top:3px;">Satuan dasar: ' + m.unit + ' &middot; Belum ada harga</div>';
+    var cur = currentPriceOf(m.id);
+    var priceText = cur ? ('Rp' + Number(cur.unit_cost).toLocaleString('id-ID',{maximumFractionDigits:2}) + '/' + m.unit) : 'Belum ada harga';
+    h += '<div class="mat-card" onclick="openMaterialDetail(' + m.id + ')"' + (m.active ? '' : ' style="opacity:.5;"') + '>';
+    h += '<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">' + m.name + (m.active ? '' : ' <span style="font-size:10px;color:#888;">(Nonaktif)</span>') + '</span><span style="color:var(--gold-dark);font-weight:700;">' + priceText + '</span></div>';
+    h += '<div style="font-size:11.5px;color:var(--wood-light);margin-top:3px;">Satuan dasar: ' + m.unit + '</div>';
     h += '</div>';
   });
   el.innerHTML = h;
+}
+
+function openMaterialDetail(id){
+  activeDetailId = id;
+  var m = materials.find(function(x){ return x.id === id; });
+  if(!m) return;
+
+  document.getElementById('detailMatName').textContent = m.name;
+  document.getElementById('detailActiveToggle').checked = m.active;
+
+  var cur = currentPriceOf(id);
+  document.getElementById('detailCurrentPrice').innerHTML = cur
+    ? '<div style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:10px 14px;font-size:13px;">Harga aktif: <b>Rp' + Number(cur.unit_cost).toLocaleString('id-ID',{maximumFractionDigits:2}) + '/' + m.unit + '</b></div>'
+    : '<div style="color:var(--wood-light);font-size:13px;">Belum ada harga tercatat.</div>';
+
+  var opts = UNIT_OPTIONS[m.unit] || [{v:m.unit, label:m.unit, factor:1}];
+  document.getElementById('newPriceUnit').innerHTML = opts.map(function(o){ return '<option value="' + o.v + '">' + o.label + '</option>'; }).join('');
+  document.getElementById('newPriceAmount').value = '';
+  document.getElementById('newPriceQty').value = '';
+
+  var hist = priceHistories[id] || [];
+  var histEl = document.getElementById('priceHistoryList');
+  if(hist.length === 0){
+    histEl.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--wood-light);font-size:12.5px;">Belum ada riwayat harga.</div>';
+  } else {
+    histEl.innerHTML = hist.map(function(h, idx){
+      var dt = new Date(h.effective_from).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'});
+      var basis = h.purchase_price ? ('Rp' + Number(h.purchase_price).toLocaleString('id-ID') + '/' + h.purchase_quantity + ' ' + h.purchase_unit) : '-';
+      return '<div class="hist-row' + (idx===0?' hist-current':'') + '"><span>' + dt + (idx===0?' (aktif)':'') + '</span><span>' + basis + ' &rarr; Rp' + Number(h.unit_cost).toLocaleString('id-ID',{maximumFractionDigits:2}) + '/' + m.unit + '</span></div>';
+    }).join('');
+  }
+
+  openModal('modalMaterialDetail');
 }
 
 function openAddMaterial(){
