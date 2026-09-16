@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Costing & R&D — Milora Enterprise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --cream:#FAF6EE;--gold:#C9A84C;--gold-dark:#A07830;--wood:#7B4F2E;
+  --wood-light:#A0714F;--brown-text:#3E2A14;--warm-white:#FFFCF5;
+  --border:#D4B483;--shadow:rgba(123,79,46,0.15);
+  --font-display:'Playfair Display',serif;--font-body:'DM Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-body);background:var(--cream);color:var(--brown-text);min-height:100vh;}
+#loginScreen,#deniedScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+.card{background:var(--warm-white);border:1px solid var(--border);border-radius:24px;padding:36px 28px;max-width:400px;width:100%;box-shadow:0 20px 60px var(--shadow);text-align:center;}
+.card h1{font-family:var(--font-display);font-size:21px;margin-bottom:4px;}
+.card p{font-size:13px;color:var(--wood-light);margin-bottom:24px;}
+.inp{width:100%;border:1.5px solid var(--border);border-radius:12px;padding:13px 16px;font-family:var(--font-body);font-size:14px;color:var(--brown-text);background:white;outline:none;margin-bottom:12px;}
+.inp:focus{border-color:var(--gold);}
+.btn-main{width:100%;background:linear-gradient(135deg,var(--wood),var(--gold-dark));color:white;border:none;padding:14px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;}
+.btn-main:disabled{opacity:.5;}
+.err-box{font-size:12px;color:#C62828;margin-top:12px;display:none;background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:8px 12px;}
+.err-box.show{display:block;}
+#dashboard{display:none;}
+.dash-header{background:linear-gradient(135deg,var(--wood),var(--gold-dark));padding:20px 24px;display:flex;align-items:center;justify-content:space-between;}
+.dash-header h1{font-family:var(--font-display);color:white;font-size:19px;}
+.dash-header p{color:rgba(255,255,255,.8);font-size:11px;}
+.btn-logout{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:20px;font-size:12px;cursor:pointer;}
+.container{max-width:820px;margin:0 auto;padding:24px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.section-head h2{font-family:var(--font-display);font-size:19px;}
+.btn-add{background:var(--gold-dark);color:white;border:none;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;}
+.mat-card{background:var(--warm-white);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:10px;}
+.mat-top{display:flex;justify-content:space-between;align-items:center;}
+.mat-name{font-weight:700;font-size:15px;}
+.mat-inactive{opacity:.5;}
+.mat-price{color:var(--gold-dark);font-weight:700;font-size:14px;}
+.mat-sub{font-size:11.5px;color:var(--wood-light);margin-top:3px;}
+.badge-inactive{background:#EEE;color:#888;font-size:10px;padding:2px 8px;border-radius:10px;margin-left:8px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(62,42,20,.55);z-index:1000;display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--cream);border-radius:24px 24px 0 0;padding:26px 22px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;}
+.modal-box h3{font-family:var(--font-display);font-size:18px;margin-bottom:16px;}
+label{font-size:12px;font-weight:600;color:var(--wood);display:block;margin-bottom:5px;margin-top:12px;}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hist-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:12.5px;}
+.hist-row:last-child{border-bottom:none;}
+.hist-current{color:var(--gold-dark);font-weight:700;}
+select.inp{cursor:pointer;}
+.btn-row{display:flex;gap:10px;margin-top:20px;}
+.btn-cancel{flex:1;background:white;border:1.5px solid var(--border);color:var(--wood);padding:13px;border-radius:12px;font-weight:600;cursor:pointer;}
+.btn-save{flex:2;background:var(--gold-dark);color:white;border:none;padding:13px;border-radius:12px;font-weight:600;cursor:pointer;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--brown-text);color:white;padding:13px 22px;border-radius:14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:9999;opacity:0;transition:.3s;max-width:90vw;text-align:center;}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+.empty{text-align:center;padding:40px 20px;color:var(--wood-light);font-size:13px;}
+.recipe-card{background:var(--warm-white);border:1.5px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .15s;}
+.recipe-card.selected{border-color:var(--gold-dark);background:rgba(201,168,76,.08);}
+.recipe-card .mat-name{font-weight:700;font-size:14px;}
+.recipe-card .mat-sub{font-size:11px;color:var(--wood-light);margin-top:2px;}
+.ver-card{background:var(--warm-white);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;font-size:12.5px;}
+.ver-top{display:flex;justify-content:space-between;align-items:center;font-weight:700;}
+.ver-badge{background:rgba(201,168,76,.15);color:var(--gold-dark);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;}
+.ver-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:6px;color:var(--wood-light);}
+.editor-foundation{margin-top:16px;padding:16px 18px;background:var(--warm-white);border:1.5px dashed var(--border);border-radius:14px;}
+.editor-foundation p{font-size:12px;color:var(--wood-light);margin-bottom:12px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="card">
+    <h1>Costing & R&D</h1>
+    <p>Khusus Owner — Milora Enterprise</p>
+    <input type="email" class="inp" id="loginEmail" placeholder="Email"/>
+    <input type="password" class="inp" id="loginPass" placeholder="Password"/>
+    <button class="btn-main" id="loginBtn" onclick="doLogin()">Masuk</button>
+    <div class="err-box" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="deniedScreen" style="display:none;">
+  <div class="card">
+    <h1>Akses Ditolak</h1>
+    <p>Halaman ini khusus Owner. Akun kamu tidak punya akses ke fitur Costing & R&D.</p>
+    <button class="btn-main" onclick="doLogout()">Keluar</button>
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="dash-header">
+    <div><h1>Costing & R&D</h1><p id="ownerLabel">Milora Enterprise</p></div>
+    <button class="btn-logout" onclick="doLogout()">Keluar</button>
+  </div>
+  <div class="container">
+    <div class="section-head">
+      <h2>Kelola Bahan</h2>
+      <button class="btn-add" onclick="openAddMaterial()">+ Tambah Bahan</button>
+    </div>
+    <div id="materialList"></div>
+
+    <div class="section-head" style="margin-top:32px;">
+      <h2>Kelola Resep</h2>
+    </div>
+    <div id="recipeItemList"></div>
+
+    <div id="recipeVersionPanel" style="display:none;margin-top:18px;">
+      <div class="section-head">
+        <h2 id="recipeVersionTitle" style="font-size:16px;"></h2>
+        <button class="btn-add" onclick="openNewRecipeVersion()">Buat Versi Baru</button>
+      </div>
+      <div id="recipeVersionList"></div>
+
+      <div id="newVersionEditor" class="editor-foundation" style="display:none;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:2px;">Draf Versi Resep Baru</div>
+        <div class="mat-sub" style="margin-bottom:12px;">Target: <b id="editorTargetName"></b> <span id="editorTargetSku"></span></div>
+
+        <div class="row-2">
+          <div><label>Nomor Versi</label><input type="number" class="inp" id="editorVersionNumber" min="1" step="1" onchange="recipeDraft.versionNumber = this.value"/></div>
+          <div><label>Tanggal Efektif</label><input type="date" class="inp" id="editorEffectiveDate" onchange="recipeDraft.effectiveDate = this.value"/></div>
+        </div>
+
+        <div class="row-2">
+          <div><label>Yield (Jumlah)</label><input type="number" class="inp" id="editorYieldQty" min="0" step="0.01" placeholder="Contoh: 374" onchange="recipeDraft.yieldQuantity = this.value"/></div>
+          <div><label>Yield (Satuan)</label>
+            <select class="inp" id="editorYieldUnit" onchange="recipeDraft.yieldUnit = this.value">
+              <option value="g">gram (g)</option>
+              <option value="kg">kilogram (kg)</option>
+              <option value="ml">mililiter (ml)</option>
+              <option value="liter">liter (L)</option>
+              <option value="pcs">pcs</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row-2">
+          <div><label>Tenaga Kerja / Batch (Rp)</label><input type="number" class="inp" id="editorLabor" min="0" step="1" onchange="recipeDraft.laborCost = this.value"/></div>
+          <div><label>Overhead / Batch (Rp)</label><input type="number" class="inp" id="editorOverhead" min="0" step="1" onchange="recipeDraft.overheadCost = this.value"/></div>
+        </div>
+
+        <label>Catatan (opsional)</label>
+        <input type="text" class="inp" id="editorNote" onchange="recipeDraft.note = this.value"/>
+
+        <div class="section-head" style="margin-top:20px;margin-bottom:8px;">
+          <h2 style="font-size:14px;">Bahan (Ingredient)</h2>
+          <button class="btn-add" type="button" onclick="addRecipeLine()">+ Tambah Bahan</button>
+        </div>
+        <div id="recipeLineRows"></div>
+
+        <div class="btn-row">
+          <button class="btn-cancel" type="button" onclick="cancelRecipeEditor()">Batalkan</button>
+          <button class="btn-save" type="button" onclick="openRecipeConfirmation()">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalRecipeConfirm">
+  <div class="modal-box">
+    <h3>Konfirmasi Simpan Resep</h3>
+    <div id="recipeConfirmSummary" style="font-size:13px;line-height:1.5;"></div>
+    <div style="background:#FFF3E0;border:1px solid #FFCC80;border-radius:10px;padding:10px 14px;font-size:12px;color:#7B4F2E;margin-top:14px;">
+      Versi resep yang sudah disimpan bersifat permanen (immutable). Perubahan di masa depan harus dibuat sebagai versi baru.
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" type="button" onclick="closeModal('modalRecipeConfirm')">Kembali</button>
+      <button class="btn-save" type="button" id="btnConfirmSaveRecipe" onclick="confirmSaveRecipe()">Konfirmasi &amp; Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalAddMaterial">
+  <div class="modal-box">
+    <h3>Tambah Bahan Baru</h3>
+    <label>Nama Bahan</label>
+    <input type="text" class="inp" id="newMatName" placeholder="Contoh: Winchez"/>
+    <label>Satuan Dasar</label>
+    <select class="inp" id="newMatUnit">
+      <option value="g">gram (g)</option>
+      <option value="ml">mililiter (ml)</option>
+      <option value="pcs">pcs</option>
+    </select>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modalAddMaterial')">Batal</button>
+      <button class="btn-save" onclick="saveMaterial()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="modalMaterialDetail">
+  <div class="modal-box">
+    <h3 id="detailMatName">Nama Bahan</h3>
+    <div id="detailCurrentPrice" style="margin-bottom:16px;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Riwayat Harga</div>
+      <div id="priceHistoryList"></div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Tambah Harga Baru</div>
+      <div class="row-2">
+        <div><label>Harga Beli (Rp)</label><input type="number" class="inp" id="newPriceAmount" placeholder="64000"/></div>
+        <div><label>Jumlah</label><input type="number" class="inp" id="newPriceQty" placeholder="1"/></div>
+      </div>
+      <label>Satuan Pembelian</label>
+      <select class="inp" id="newPriceUnit"></select>
+      <div class="btn-row">
+        <button class="btn-cancel" onclick="closeModal('modalMaterialDetail')">Tutup</button>
+        <button class="btn-save" onclick="savePrice()">Simpan Harga</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="detailActiveToggle" onchange="toggleMaterialActive()"/>
+        <span style="font-size:13px;font-weight:600;">Bahan aktif (dipakai untuk resep baru)</span>
+      </label>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = 'https://sixwcjbhqydufapxftip.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpeHdjamJocXlkdWZhcHhmdGlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ5MDMsImV4cCI6MjA5OTAyMDkwM30.zBNVRIKoypww2mDLeVJXZPbfheNPJ2VFV_Rs44jfChQ';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var currentOwnerName = null;
+
+function doLogin(){
+  var email = document.getElementById('loginEmail').value.trim();
+  var pass = document.getElementById('loginPass').value;
+  var errEl = document.getElementById('loginErr');
+  var btn = document.getElementById('loginBtn');
+  errEl.classList.remove('show');
+  if(!email || !pass){ errEl.textContent='Isi email dan password dulu.'; errEl.classList.add('show'); return; }
+  btn.disabled = true; btn.textContent = 'Memeriksa...';
+  sb.auth.signInWithPassword({ email:email, password:pass }).then(function(res){
+    btn.disabled = false; btn.textContent = 'Masuk';
+    if(res.error){ errEl.textContent = 'Email atau password salah.'; errEl.classList.add('show'); return; }
+    checkAccessAndShow();
+  });
+}
+
+function doLogout(){
+  sb.auth.signOut().then(function(){
+    document.getElementById('dashboard').style.display='none';
+    document.getElementById('deniedScreen').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+    selectedRecipeItemId = null;
+    recipeDraft = null;
+    document.getElementById('recipeVersionPanel').style.display='none';
+    document.getElementById('newVersionEditor').style.display='none';
+    closeModal('modalRecipeConfirm');
+  });
+}
+
+// PENTING: ini cuma nentuin TAMPILAN. Penegakan sesungguhnya ada di RLS
+// (is_owner()) pada tabel cost_items dkk dari Step 1 — staff yang nyasar
+// ke sini pun query-nya akan ditolak database, bukan cuma disembunyikan UI.
+function checkAccessAndShow(){
+  sb.auth.getUser().then(function(res){
+    var uid = res.data && res.data.user ? res.data.user.id : null;
+    if(!uid){ doLogout(); return; }
+    sb.from('staff').select('name,role').eq('auth_user_id', uid).eq('role','owner').eq('active', true).maybeSingle().then(function(r){
+      if(!r.data){
+        document.getElementById('loginScreen').style.display='none';
+        document.getElementById('deniedScreen').style.display='flex';
+        return;
+      }
+      currentOwnerName = r.data.name;
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      document.getElementById('ownerLabel').textContent = 'Owner: ' + currentOwnerName;
+      loadMaterials();
+      loadManufacturedItems();
+    });
+  });
+}
+
+sb.auth.getSession().then(function(res){ if(res.data && res.data.session) checkAccessAndShow(); });
+
+var materials = [];
+var priceHistories = {};
+var activeDetailId = null;
+
+var manufacturedItems = [];
+var ingredientCandidates = [];
+var selectedRecipeItemId = null;
+var recipeVersions = [];
+var recipeDraft = null; // client-side only draft for Step 2B-2B editor; never written to DB until Confirm & Save
+
+// Konversi metrik terbatas, hardcode & immutable — bukan tabel yang bisa diedit.
+var UNIT_OPTIONS = {
+  g:  [{v:'g', label:'gram (g)', factor:1}, {v:'kg', label:'kilogram (kg)', factor:1000}],
+  ml: [{v:'ml', label:'mililiter (ml)', factor:1}, {v:'liter', label:'liter (L)', factor:1000}],
+  pcs:[{v:'pcs', label:'pcs', factor:1}]
+};
+
+function showToast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+function loadMaterials(){
+  sb.from('cost_items').select('*').eq('item_type','purchased').order('name').then(function(res){
+    if(res.error){ showToast('Gagal memuat bahan: ' + res.error.message); return; }
+    materials = res.data || [];
+    loadAllPriceHistory();
+  });
+}
+
+function loadAllPriceHistory(){
+  sb.from('cost_item_price_history').select('*').order('effective_from', {ascending:false}).then(function(res){
+    priceHistories = {};
+    (res.data || []).forEach(function(row){
+      if(!priceHistories[row.cost_item_id]) priceHistories[row.cost_item_id] = [];
+      priceHistories[row.cost_item_id].push(row);
+    });
+    renderMaterialList();
+  });
+}
+
+function currentPriceOf(costItemId){
+  var hist = priceHistories[costItemId] || [];
+  var now = new Date();
+  var eligible = hist.filter(function(h){ return new Date(h.effective_from) <= now; });
+  return eligible.length ? eligible[0] : null; // sudah urut terbaru duluan dari query
+}
+
+function renderMaterialList(){
+  var el = document.getElementById('materialList');
+  if(materials.length === 0){
+    el.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--wood-light);font-size:13px;">Belum ada bahan. Klik "+ Tambah Bahan" buat mulai.</div>';
+    return;
+  }
+  var h = '';
+  materials.forEach(function(m){
+    var cur = currentPriceOf(m.id);
+    var priceText = cur ? ('Rp' + Number(cur.unit_cost).toLocaleString('id-ID',{maximumFractionDigits:2}) + '/' + m.unit) : 'Belum ada harga';
+    h += '<div class="mat-card" onclick="openMaterialDetail(' + m.id + ')"' + (m.active ? '' : ' style="opacity:.5;"') + '>';
+    h += '<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">' + m.name + (m.active ? '' : ' <span style="font-size:10px;color:#888;">(Nonaktif)</span>') + '</span><span style="color:var(--gold-dark);font-weight:700;">' + priceText + '</span></div>';
+    h += '<div style="font-size:11.5px;color:var(--wood-light);margin-top:3px;">Satuan dasar: ' + m.unit + '</div>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+function openMaterialDetail(id){
+  activeDetailId = id;
+  var m = materials.find(function(x){ return x.id === id; });
+  if(!m) return;
+
+  document.getElementById('detailMatName').textContent = m.name;
+  document.getElementById('detailActiveToggle').checked = m.active;
+
+  var cur = currentPriceOf(id);
+  document.getElementById('detailCurrentPrice').innerHTML = cur
+    ? '<div style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:10px 14px;font-size:13px;">Harga aktif: <b>Rp' + Number(cur.unit_cost).toLocaleString('id-ID',{maximumFractionDigits:2}) + '/' + m.unit + '</b></div>'
+    : '<div style="color:var(--wood-light);font-size:13px;">Belum ada harga tercatat.</div>';
+
+  var opts = UNIT_OPTIONS[m.unit] || [{v:m.unit, label:m.unit, factor:1}];
+  document.getElementById('newPriceUnit').innerHTML = opts.map(function(o){ return '<option value="' + o.v + '">' + o.label + '</option>'; }).join('');
+  document.getElementById('newPriceAmount').value = '';
+  document.getElementById('newPriceQty').value = '';
+
+  var hist = priceHistories[id] || [];
+  var histEl = document.getElementById('priceHistoryList');
+  if(hist.length === 0){
+    histEl.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--wood-light);font-size:12.5px;">Belum ada riwayat harga.</div>';
+  } else {
+    histEl.innerHTML = hist.map(function(h, idx){
+      var dt = new Date(h.effective_from).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'});
+      var basis = h.note ? h.note : '-';
+      return '<div class="hist-row' + (idx===0?' hist-current':'') + '"><span>' + dt + (idx===0?' (aktif)':'') + '</span><span>' + basis + ' &rarr; Rp' + Number(h.unit_cost).toLocaleString('id-ID',{maximumFractionDigits:2}) + '/' + m.unit + '</span></div>';
+    }).join('');
+  }
+
+  openModal('modalMaterialDetail');
+}
+
+function openAddMaterial(){
+  document.getElementById('newMatName').value = '';
+  document.getElementById('newMatUnit').value = 'g';
+  openModal('modalAddMaterial');
+}
+
+function saveMaterial(){
+  var name = document.getElementById('newMatName').value.trim();
+  var unit = document.getElementById('newMatUnit').value;
+  if(!name){ showToast('Nama bahan wajib diisi'); return; }
+  var dupe = materials.find(function(m){ return m.name.toLowerCase() === name.toLowerCase(); });
+  if(dupe){ showToast('Bahan dengan nama ini sudah ada'); return; }
+  var sku = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  sb.from('cost_items').insert([{ sku: sku, name: name, unit: unit, item_type: 'purchased', active: true }]).then(function(res){
+    if(res.error){ showToast('Gagal simpan: ' + res.error.message); return; }
+    showToast('Bahan "' + name + '" ditambahkan');
+    closeModal('modalAddMaterial');
+    loadMaterials();
+  });
+}
+
+function savePrice(){
+  var m = materials.find(function(x){ return x.id === activeDetailId; });
+  if(!m) return;
+  var price = parseFloat(document.getElementById('newPriceAmount').value);
+  var qty = parseFloat(document.getElementById('newPriceQty').value);
+  var unit = document.getElementById('newPriceUnit').value;
+  if(!(price > 0)){ showToast('Harga harus lebih dari 0'); return; }
+  if(!(qty > 0)){ showToast('Jumlah harus lebih dari 0'); return; }
+  var opts = UNIT_OPTIONS[m.unit] || [{v:m.unit, factor:1}];
+  var factor = (opts.find(function(o){ return o.v === unit; }) || {factor:1}).factor;
+  var totalBaseQty = qty * factor;
+  var unitCost = price / totalBaseQty;
+  var basisNote = 'Rp' + Number(price).toLocaleString('id-ID') + ' / ' + qty + ' ' + unit;
+  sb.from('cost_item_price_history').insert([{
+    cost_item_id: activeDetailId, unit_cost: unitCost, note: basisNote,
+    effective_from: new Date().toISOString()
+  }]).then(function(res){
+    if(res.error){ showToast('Gagal simpan harga: ' + res.error.message); return; }
+    showToast('Harga baru tersimpan');
+    loadAllPriceHistory();
+    setTimeout(function(){ openMaterialDetail(activeDetailId); }, 300);
+  });
+}
+
+function toggleMaterialActive(){
+  var checked = document.getElementById('detailActiveToggle').checked;
+  sb.from('cost_items').update({ active: checked }).eq('id', activeDetailId).then(function(res){
+    if(res.error){ showToast('Gagal ubah status: ' + res.error.message); return; }
+    showToast(checked ? 'Bahan diaktifkan' : 'Bahan dinonaktifkan');
+    loadMaterials();
+  });
+}
+
+// ===== STEP 2B-2A — Kelola Resep (foundation UI, read-only) =====
+
+function loadManufacturedItems(){
+  sb.from('cost_items').select('*').eq('item_type', 'manufactured').eq('active', true).order('name').then(function(res){
+    if(res.error){ showToast('Gagal memuat komponen manufaktur: ' + res.error.message); return; }
+    manufacturedItems = res.data || [];
+    renderRecipeItemList();
+  });
+}
+
+function renderRecipeItemList(){
+  var el = document.getElementById('recipeItemList');
+  if(manufacturedItems.length === 0){
+    el.innerHTML = '<div class="empty">Belum ada komponen manufaktur aktif.</div>';
+    return;
+  }
+  var h = '';
+  manufacturedItems.forEach(function(m){
+    var sel = (m.id === selectedRecipeItemId) ? ' selected' : '';
+    h += '<div class="recipe-card' + sel + '" onclick="selectRecipeItem(' + m.id + ')">';
+    h += '<div class="mat-name">' + m.name + '</div>';
+    h += '<div class="mat-sub">SKU: ' + m.sku + '</div>';
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+function selectRecipeItem(id){
+  selectedRecipeItemId = id;
+  renderRecipeItemList();
+
+  var m = manufacturedItems.find(function(x){ return x.id === id; });
+  document.getElementById('recipeVersionTitle').textContent = 'Resep: ' + (m ? m.name : '');
+  document.getElementById('recipeVersionPanel').style.display = 'block';
+  recipeDraft = null;
+  document.getElementById('newVersionEditor').style.display = 'none';
+
+  loadRecipeVersions(id);
+}
+
+function loadRecipeVersions(costItemId){
+  var el = document.getElementById('recipeVersionList');
+  el.innerHTML = '<div class="empty">Memuat versi resep...</div>';
+  sb.from('recipe_versions').select('*').eq('cost_item_id', costItemId)
+    .order('effective_from', {ascending:false})
+    .order('version_number', {ascending:false})
+    .then(function(res){
+      if(res.error){ showToast('Gagal memuat versi resep: ' + res.error.message); return; }
+      recipeVersions = res.data || [];
+      renderRecipeVersionList();
+    });
+}
+
+function renderRecipeVersionList(){
+  var el = document.getElementById('recipeVersionList');
+  if(recipeVersions.length === 0){
+    el.innerHTML = '<div class="empty">Belum ada versi resep untuk komponen ini.</div>';
+    return;
+  }
+  var h = '';
+  recipeVersions.forEach(function(v, idx){
+    var dt = new Date(v.effective_from).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'});
+    h += '<div class="ver-card">';
+    h += '<div class="ver-top"><span>Versi ' + v.version_number + (idx===0 ? ' <span class="ver-badge">Terbaru</span>' : '') + '</span><span>' + dt + '</span></div>';
+    h += '<div class="ver-grid">';
+    h += '<span>Yield: ' + v.yield_quantity + '</span>';
+    h += '<span>Labor: Rp' + Number(v.labor_cost_per_batch).toLocaleString('id-ID', {maximumFractionDigits:2}) + '</span>';
+    h += '<span>Overhead: Rp' + Number(v.overhead_cost_per_batch).toLocaleString('id-ID', {maximumFractionDigits:2}) + '</span>';
+    h += '<span>Catatan: ' + (v.note ? v.note : '-') + '</span>';
+    h += '</div></div>';
+  });
+  el.innerHTML = h;
+}
+
+function loadIngredientCandidates(){
+  sb.from('cost_items').select('*').eq('active', true).order('item_type').order('name').then(function(res){
+    if(res.error){ showToast('Gagal memuat daftar bahan: ' + res.error.message); return; }
+    ingredientCandidates = res.data || [];
+    if(recipeDraft) renderIngredientLinesEditor();
+  });
+}
+
+// ===== STEP 2B-2B — Recipe Editor + Save Flow =====
+//
+// recipeDraft is purely client-side state. Nothing here touches Supabase
+// until confirmSaveRecipe() runs, and that call goes exclusively through
+// the create_recipe_version() RPC (one atomic transaction). Closing,
+// canceling, or navigating away from the editor never persists anything.
+
+function blankRecipeLine(){
+  return { type: 'purchased', ingredientCostItemId: null, ingredientRecipeVersionId: null, availableVersions: null, quantity: '', unit: '', wastePct: 0 };
+}
+
+function openNewRecipeVersion(){
+  if(!selectedRecipeItemId){ showToast('Pilih komponen dulu'); return; }
+  var editor = document.getElementById('newVersionEditor');
+  var isOpen = editor.style.display === 'block';
+  if(isOpen){ cancelRecipeEditor(); return; }
+
+  var m = manufacturedItems.find(function(x){ return x.id === selectedRecipeItemId; });
+  var nextVersion = 1;
+  if(recipeVersions.length){
+    nextVersion = Math.max.apply(null, recipeVersions.map(function(v){ return v.version_number; })) + 1;
+  }
+  var todayStr = new Date().toISOString().slice(0, 10);
+
+  recipeDraft = {
+    costItemId: selectedRecipeItemId,
+    costItemName: m ? m.name : '',
+    costItemSku: m ? m.sku : '',
+    versionNumber: nextVersion,
+    effectiveDate: todayStr,
+    yieldQuantity: '',
+    yieldUnit: 'g',
+    laborCost: 0,
+    overheadCost: 0,
+    note: '',
+    lines: [ blankRecipeLine() ]
+  };
+
+  editor.style.display = 'block';
+  renderRecipeEditorHeader();
+  loadIngredientCandidates(); // triggers renderIngredientLinesEditor() once loaded
+  renderIngredientLinesEditor();
+}
+
+// Cancel/close: discards the draft entirely. Nothing was ever written to DB.
+function cancelRecipeEditor(){
+  recipeDraft = null;
+  document.getElementById('newVersionEditor').style.display = 'none';
+}
+
+function renderRecipeEditorHeader(){
+  var d = recipeDraft;
+  document.getElementById('editorTargetName').textContent = d.costItemName;
+  document.getElementById('editorTargetSku').textContent = d.costItemSku ? ('(SKU: ' + d.costItemSku + ')') : '';
+  document.getElementById('editorVersionNumber').value = d.versionNumber;
+  document.getElementById('editorEffectiveDate').value = d.effectiveDate;
+  document.getElementById('editorYieldQty').value = d.yieldQuantity;
+  document.getElementById('editorYieldUnit').value = d.yieldUnit;
+  document.getElementById('editorLabor').value = d.laborCost;
+  document.getElementById('editorOverhead').value = d.overheadCost;
+  document.getElementById('editorNote').value = d.note;
+}
+
+function addRecipeLine(){
+  if(!recipeDraft) return;
+  recipeDraft.lines.push(blankRecipeLine());
+  renderIngredientLinesEditor();
+}
+
+function removeRecipeLine(idx){
+  if(!recipeDraft) return;
+  recipeDraft.lines.splice(idx, 1);
+  renderIngredientLinesEditor();
+}
+
+function setLineType(idx, type){
+  var line = recipeDraft.lines[idx];
+  line.type = type;
+  line.ingredientCostItemId = null;
+  line.ingredientRecipeVersionId = null;
+  line.availableVersions = null;
+  line.unit = '';
+  renderIngredientLinesEditor();
+}
+
+// User picks the ingredient itself. For manufactured ingredients this
+// fetches that ingredient's own recipe_versions — scoped to its cost_item_id,
+// never resolved to "latest" — so the version dropdown only ever offers
+// versions that truly belong to the selected ingredient.
+function setLineIngredient(idx, val){
+  var line = recipeDraft.lines[idx];
+  line.ingredientCostItemId = val ? parseInt(val, 10) : null;
+  line.ingredientRecipeVersionId = null;
+  line.unit = '';
+
+  if(line.type === 'manufactured' && line.ingredientCostItemId){
+    line.availableVersions = null; // null = "loading"
+    renderIngredientLinesEditor();
+    var targetCostItemId = line.ingredientCostItemId;
+    sb.from('recipe_versions').select('*').eq('cost_item_id', targetCostItemId)
+      .order('effective_from', {ascending:false}).order('version_number', {ascending:false})
+      .then(function(res){
+        if(line.ingredientCostItemId !== targetCostItemId) return; // selection changed while loading
+        if(res.error){ showToast('Gagal memuat versi resep: ' + res.error.message); line.availableVersions = []; renderIngredientLinesEditor(); return; }
+        line.availableVersions = res.data || [];
+        renderIngredientLinesEditor();
+      });
+  } else {
+    if(line.type === 'purchased' && line.ingredientCostItemId){
+      var item = ingredientCandidates.find(function(c){ return c.id === line.ingredientCostItemId; });
+      if(item) line.unit = item.unit;
+    }
+    renderIngredientLinesEditor();
+  }
+}
+
+function setLineRecipeVersion(idx, val){
+  var line = recipeDraft.lines[idx];
+  line.ingredientRecipeVersionId = val ? parseInt(val, 10) : null;
+  if(line.ingredientRecipeVersionId && line.availableVersions){
+    var v = line.availableVersions.find(function(x){ return x.id === line.ingredientRecipeVersionId; });
+    if(v) line.unit = v.yield_unit;
+  }
+  renderIngredientLinesEditor();
+}
+
+// Plain field edits (quantity/unit/waste) never change the selected
+// ingredient type or version, so no full re-render is needed here —
+// this also avoids stealing focus out of the input the user is typing in.
+function setLineField(idx, field, val){
+  recipeDraft.lines[idx][field] = val;
+}
+
+function unitOptionsForLine(line){
+  var baseUnit = null;
+  if(line.type === 'purchased' && line.ingredientCostItemId){
+    var item = ingredientCandidates.find(function(c){ return c.id === line.ingredientCostItemId; });
+    if(item) baseUnit = item.unit;
+  } else if(line.type === 'manufactured' && line.ingredientRecipeVersionId && line.availableVersions){
+    var v = line.availableVersions.find(function(x){ return x.id === line.ingredientRecipeVersionId; });
+    if(v) baseUnit = v.yield_unit;
+  }
+  if(!baseUnit) return [{v:'', label:'Pilih bahan dulu'}];
+  return UNIT_OPTIONS[baseUnit] || [{v:baseUnit, label:baseUnit}];
+}
+
+function renderIngredientLinesEditor(){
+  var el = document.getElementById('recipeLineRows');
+  if(!el || !recipeDraft) return;
+
+  // Only purchased/manufactured may ever appear here — sellable cost_items
+  // represent an output/product, not an ingredient, and are never offered.
+  var purchasedOpts = ingredientCandidates.filter(function(c){ return c.item_type === 'purchased'; });
+  var manufacturedOpts = ingredientCandidates.filter(function(c){ return c.item_type === 'manufactured'; });
+
+  var h = '';
+  recipeDraft.lines.forEach(function(line, idx){
+    var candidates = line.type === 'purchased' ? purchasedOpts : manufacturedOpts;
+    h += '<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--warm-white);">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+    h += '<span style="font-weight:700;font-size:12.5px;">Bahan #' + (idx + 1) + '</span>';
+    h += '<button type="button" style="background:none;border:none;color:#C62828;font-size:12px;cursor:pointer;font-weight:600;" onclick="removeRecipeLine(' + idx + ')">Hapus</button>';
+    h += '</div>';
+
+    h += '<label>Jenis Bahan</label>';
+    h += '<select class="inp" onchange="setLineType(' + idx + ', this.value)">';
+    h += '<option value="purchased"' + (line.type === 'purchased' ? ' selected' : '') + '>Bahan Baku (Purchased)</option>';
+    h += '<option value="manufactured"' + (line.type === 'manufactured' ? ' selected' : '') + '>Sub-Resep (Manufactured)</option>';
+    h += '</select>';
+
+    h += '<label>Bahan</label>';
+    h += '<select class="inp" onchange="setLineIngredient(' + idx + ', this.value)">';
+    h += '<option value="">Pilih bahan...</option>';
+    candidates.forEach(function(c){
+      h += '<option value="' + c.id + '"' + (line.ingredientCostItemId === c.id ? ' selected' : '') + '>' + c.name + '</option>';
+    });
+    h += '</select>';
+
+    if(line.type === 'manufactured'){
+      h += '<label>Versi Resep</label>';
+      if(!line.ingredientCostItemId){
+        h += '<div class="mat-sub">Pilih bahan manufaktur dulu.</div>';
+      } else if(line.availableVersions === null){
+        h += '<div class="mat-sub">Memuat versi resep...</div>';
+      } else if(line.availableVersions.length === 0){
+        h += '<div style="color:#C62828;font-size:12px;">Belum ada versi resep tersimpan untuk bahan ini. Buat versinya dulu sebelum dipakai sebagai sub-resep.</div>';
+      } else {
+        h += '<select class="inp" onchange="setLineRecipeVersion(' + idx + ', this.value)">';
+        h += '<option value="">Pilih versi...</option>';
+        line.availableVersions.forEach(function(v){
+          var dt = new Date(v.effective_from).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'});
+          h += '<option value="' + v.id + '"' + (line.ingredientRecipeVersionId === v.id ? ' selected' : '') + '>Versi ' + v.version_number + ' — Yield ' + v.yield_quantity + ' ' + v.yield_unit + ' — Efektif ' + dt + '</option>';
+        });
+        h += '</select>';
+      }
+    }
+
+    var unitOpts = unitOptionsForLine(line);
+    h += '<div class="row-2">';
+    h += '<div><label>Kuantitas</label><input type="number" class="inp" min="0" step="0.01" value="' + (line.quantity === null ? '' : line.quantity) + '" onchange="setLineField(' + idx + ', \'quantity\', this.value)"/></div>';
+    h += '<div><label>Satuan</label><select class="inp" onchange="setLineField(' + idx + ', \'unit\', this.value)">';
+    unitOpts.forEach(function(o){ h += '<option value="' + o.v + '"' + (line.unit === o.v ? ' selected' : '') + '>' + (o.label || o.v) + '</option>'; });
+    h += '</select></div>';
+    h += '</div>';
+
+    h += '<label>Waste (%)</label>';
+    h += '<input type="number" class="inp" min="0" step="0.01" value="' + (line.wastePct === null ? 0 : line.wastePct) + '" onchange="setLineField(' + idx + ', \'wastePct\', this.value)"/>';
+
+    h += '</div>';
+  });
+
+  el.innerHTML = h || '<div class="empty">Belum ada baris bahan.</div>';
+}
+
+// Local-calendar-date string for a DB timestamp, so it can be compared against
+// an <input type="date"> value (a plain YYYY-MM-DD with no timezone). Matches
+// how renderRecipeVersionList() already displays effective_from via
+// toLocaleDateString() — same browser-local interpretation, just non-localized.
+function dateOnlyLocal(isoLike){
+  var dt = new Date(isoLike);
+  if(isNaN(dt.getTime())) return null;
+  var y = dt.getFullYear();
+  var m = ('0' + (dt.getMonth() + 1)).slice(-2);
+  var day = ('0' + dt.getDate()).slice(-2);
+  return y + '-' + m + '-' + day;
+}
+
+// Phase D — client validation. The RPC/DB triggers remain authoritative;
+// this only gives the owner a clear message before hitting the network.
+function validateRecipeDraft(){
+  var errors = [];
+  var d = recipeDraft;
+  if(!d) return { valid:false, errors:['Draf resep tidak ditemukan'] };
+
+  if(!d.costItemId) errors.push('Target produk/komponen tidak valid');
+
+  var vn = Number(d.versionNumber);
+  if(!(Number.isInteger(vn) && vn > 0)) errors.push('Nomor versi harus bilangan bulat positif');
+
+  if(!d.effectiveDate) errors.push('Tanggal efektif wajib diisi');
+
+  // Phase D-2 — duplicate version/effective-date guard. recipeVersions is
+  // already scoped to d.costItemId (loaded by loadRecipeVersions()), so this
+  // mirrors the DB's recipe_versions_cost_item_effective_from_key unique
+  // constraint before ever calling the RPC. Existing Version 1 data is only
+  // read here, never modified.
+  if(d.effectiveDate && (recipeVersions || []).length){
+    var dupDate = recipeVersions.find(function(v){ return dateOnlyLocal(v.effective_from) === d.effectiveDate; });
+    if(dupDate) errors.push('Tanggal efektif ' + d.effectiveDate + ' sudah dipakai oleh Versi ' + dupDate.version_number + '. Pilih tanggal lain.');
+  }
+  if(Number.isInteger(vn) && vn > 0 && (recipeVersions || []).length){
+    var dupVer = recipeVersions.find(function(v){ return v.version_number === vn; });
+    if(dupVer){
+      var suggested = Math.max.apply(null, recipeVersions.map(function(v){ return v.version_number; })) + 1;
+      errors.push('Nomor Versi ' + vn + ' sudah digunakan. Nomor yang disarankan: Versi ' + suggested + '.');
+    }
+  }
+
+  var yq = Number(d.yieldQuantity);
+  if(!(yq > 0)) errors.push('Yield quantity harus lebih dari 0');
+  if(!d.yieldUnit) errors.push('Yield unit wajib dipilih');
+
+  var labor = Number(d.laborCost);
+  if(isNaN(labor) || labor < 0) errors.push('Biaya tenaga kerja tidak boleh negatif');
+  var overhead = Number(d.overheadCost);
+  if(isNaN(overhead) || overhead < 0) errors.push('Biaya overhead tidak boleh negatif');
+
+  if(!d.lines || d.lines.length === 0){
+    errors.push('Minimal harus ada 1 baris bahan');
+  }
+  (d.lines || []).forEach(function(line, idx){
+    var n = idx + 1;
+    if(!line.ingredientCostItemId){ errors.push('Baris ' + n + ': bahan belum dipilih'); return; }
+
+    if(line.type === 'purchased'){
+      if(line.ingredientRecipeVersionId){ errors.push('Baris ' + n + ': bahan baku tidak boleh memiliki versi resep'); }
+    } else if(line.type === 'manufactured'){
+      if(!line.ingredientRecipeVersionId){
+        errors.push('Baris ' + n + ': pilih versi resep untuk sub-resep manufaktur');
+      } else if(line.availableVersions && !line.availableVersions.some(function(v){ return v.id === line.ingredientRecipeVersionId; })){
+        errors.push('Baris ' + n + ': versi resep yang dipilih tidak valid untuk bahan ini');
+      }
+    }
+
+    var q = Number(line.quantity);
+    if(!(q > 0)) errors.push('Baris ' + n + ': kuantitas harus lebih dari 0');
+    if(!line.unit) errors.push('Baris ' + n + ': satuan wajib dipilih');
+    var w = Number(line.wastePct);
+    if(isNaN(w) || w < 0) errors.push('Baris ' + n + ': waste % tidak boleh negatif');
+  });
+
+  return { valid: errors.length === 0, errors: errors };
+}
+
+function openRecipeConfirmation(){
+  var result = validateRecipeDraft();
+  if(!result.valid){
+    showToast(result.errors[0] + (result.errors.length > 1 ? ' (+' + (result.errors.length - 1) + ' lainnya)' : ''));
+    return;
+  }
+  renderRecipeConfirmSummary();
+  openModal('modalRecipeConfirm');
+}
+
+function renderRecipeConfirmSummary(){
+  var d = recipeDraft;
+  var dt = new Date(d.effectiveDate + 'T00:00:00').toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'});
+  var h = '';
+  h += '<div style="margin-bottom:10px;"><b>' + d.costItemName + '</b><br/>Versi ' + d.versionNumber + ' &middot; Efektif ' + dt + '</div>';
+  h += '<div style="margin-bottom:10px;">Yield: <b>' + d.yieldQuantity + ' ' + d.yieldUnit + '</b></div>';
+  h += '<div style="font-weight:700;margin-bottom:6px;">Bahan:</div>';
+  d.lines.forEach(function(line, idx){
+    var item = ingredientCandidates.find(function(c){ return c.id === line.ingredientCostItemId; });
+    var typeLabel = line.type === 'purchased' ? 'Bahan Baku' : 'Sub-Resep Manufaktur';
+    h += '<div style="border-bottom:1px dashed var(--border);padding:6px 0;">';
+    h += (idx + 1) + '. ' + typeLabel + ' — <b>' + (item ? item.name : '?') + '</b><br/>';
+    if(line.type === 'manufactured'){
+      var v = (line.availableVersions || []).find(function(x){ return x.id === line.ingredientRecipeVersionId; });
+      h += '&nbsp;&nbsp;Recipe Version: ' + (v ? ('Versi ' + v.version_number) : '?') + '<br/>';
+    }
+    h += '&nbsp;&nbsp;' + line.quantity + ' ' + line.unit + ', Waste ' + (line.wastePct || 0) + '%';
+    h += '</div>';
+  });
+  h += '<div style="margin-top:10px;">Labor: <b>Rp' + Number(d.laborCost || 0).toLocaleString('id-ID') + '</b></div>';
+  h += '<div>Overhead: <b>Rp' + Number(d.overheadCost || 0).toLocaleString('id-ID') + '</b></div>';
+  h += '<div style="margin-top:6px;">Catatan: ' + (d.note ? d.note : '-') + '</div>';
+  document.getElementById('recipeConfirmSummary').innerHTML = h;
+}
+
+// The ONLY save path. One RPC call = one DB transaction that inserts
+// recipe_versions + all recipe_lines together. If any line fails, the
+// whole thing rolls back. No client-side multi-step inserts, ever.
+function confirmSaveRecipe(){
+  if(!recipeDraft) return;
+  var recheck = validateRecipeDraft();
+  if(!recheck.valid){
+    showToast(recheck.errors[0]);
+    return;
+  }
+
+  var btn = document.getElementById('btnConfirmSaveRecipe');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+
+  var d = recipeDraft;
+  var pLines = d.lines.map(function(line){
+    return {
+      ingredient_cost_item_id: line.ingredientCostItemId,
+      ingredient_recipe_version_id: line.type === 'manufactured' ? line.ingredientRecipeVersionId : null,
+      quantity: Number(line.quantity),
+      unit: line.unit,
+      waste_pct: Number(line.wastePct) || 0
+      // component_type intentionally omitted — RPC defaults it to 'material'.
+      // The material/packaging axis is a separate, later concern from
+      // purchased-vs-manufactured and is out of scope for this checkpoint.
+    };
+  });
+
+  var effectiveIso = new Date(d.effectiveDate + 'T00:00:00').toISOString();
+
+  sb.rpc('create_recipe_version', {
+    p_cost_item_id: d.costItemId,
+    p_version_number: parseInt(d.versionNumber, 10),
+    p_yield_quantity: Number(d.yieldQuantity),
+    p_yield_unit: d.yieldUnit,
+    p_lines: pLines,
+    p_effective_from: effectiveIso,
+    p_labor_cost_per_batch: Number(d.laborCost) || 0,
+    p_overhead_cost_per_batch: Number(d.overheadCost) || 0,
+    p_note: d.note || null
+  }).then(function(res){
+    btn.disabled = false; btn.textContent = 'Konfirmasi & Simpan';
+    if(res.error){
+      // Draft stays exactly as the owner left it — nothing is cleared on error.
+      showToast('Gagal menyimpan resep: ' + res.error.message);
+      return;
+    }
+    closeModal('modalRecipeConfirm');
+    cancelRecipeEditor();
+    showToast('Versi resep baru berhasil disimpan');
+    loadRecipeVersions(d.costItemId);
+  });
+}
+</script>
+</body>
+</html>
